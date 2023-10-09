@@ -12,7 +12,7 @@ track = [
 ]
 
 
-def create_loop_track(radius=50, num_segments=100):
+def create_loop_track(radius=100, num_segments=100):
     """
     Create a loop track with the given radius and number of segments.
 
@@ -127,7 +127,7 @@ def check_collision_between_cars(car1_position, car2_position, car_size=1.0):
     else:
         return False  # No collision
 
-def place_car_on_track(car, track_2D, segment_index):
+def place_car_on_track(car, track_2D, start_index):
     """
     Place the car on a specific segment of the track.
 
@@ -139,9 +139,14 @@ def place_car_on_track(car, track_2D, segment_index):
     Returns:
         None: The car's position is updated in place.
     """
-    segment_start = track_2D[segment_index]
-    segment_end = track_2D[(segment_index + 1) % len(track_2D)]  # Loop back to start if at end
+    car.position = np.array(track_2D[start_index])
 
-    # Place the car at the midpoint of the segment
-    midpoint = [(segment_start[0] + segment_end[0]) / 2, (segment_start[1] + segment_end[1]) / 2]
-    car.position = np.array(midpoint)
+    # Compute the direction towards the next point in the track
+    next_point = np.array(track_2D[(start_index + 1) % len(track_2D)])
+    direction_vector = next_point - car.position
+
+    # Normalize the direction vector
+    direction_vector /= np.linalg.norm(direction_vector)
+
+    # Set the car's velocity to make it head towards the centerline
+    car.velocity = direction_vector
