@@ -58,7 +58,7 @@ class PolicyNetwork(nn.Module):
 
 
 # Hyperparameters
-input_dim = 4  # [distance_central_line, x_velocity, y_velocity,current_steering_angle]
+input_dim = 7  # [ x_velocity, y_velocity,closest_point_x,closest_point_y,current_steering_angle]
 output_dim = 2  # [acceleration, turn_angle]
 learning_rate = 0.001
 gamma = 0.99  # Discount factor
@@ -77,9 +77,11 @@ optimizer = optim.Adam(network.parameters(), lr=learning_rate)
 criterion = nn.MSELoss()
 
 def get_state(car, track_2D):
-    distance = compute_distance_central_line(car, track_2D)  # Assuming you have this function implemented
+    _,closest_point = compute_distance_central_line(car, track_2D)  # Assuming you have this function implemented
+    point_x,point_y=closest_point
+    position_x,position_y=car.position
     speed_x,spped_y = car.velocity
-    return torch.FloatTensor([distance, speed_x,spped_y,car.current_steering_angle])
+    return torch.FloatTensor([position_x,position_y ,speed_x,spped_y,point_x,point_y,car.current_steering_angle])
 
 # Function to perform Q-Learning within the racing environment with corrected action selection
 import math
@@ -106,7 +108,7 @@ def advanced_reward_function(car, track_2D, collision):
         return -100.0  # Large negative reward for collision
 
     # Compute the distance to the centerline of the closest track segment
-    min_distance = compute_distance_central_line(car, track_2D)
+    min_distance,_ = compute_distance_central_line(car, track_2D)
 
     # Compute the speed of the car
     speed = np.linalg.norm(car.velocity)
@@ -198,9 +200,10 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
                 episode_reward += reward
 
                 # Draw the car
-                draw_car(car, screen)
+                draw_car(car, screen,track_2D)
+
             pygame.display.update()
-            if len(replay_buffer) >= batch_size and int(time)%5:
+            if len(replay_buffer) >= batch_size and int(time)%5==0:
                 sampled_states, sampled_actions, sampled_rewards, sampled_next_states, sampled_dones = replay_buffer.sample(batch_size)
 
                 sampled_next_states_array = np.vstack(sampled_next_states)
@@ -210,13 +213,11 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
 
                 # Compute target Q-values using both the target Q-Networks
                 with torch.no_grad():
-                    print("Shape of sampled_next_states:", np.array(sampled_next_states).shape)
+
                     next_actions = policy_network(sampled_next_states_tensor)
                     q1_target, q2_target = target_q_network(sampled_next_states_tensor)
                     min_q_target = torch.min(q1_target, q2_target)
-                    print("Shape of sampled_rewards:", torch.FloatTensor(sampled_rewards).shape)
-                    print("Shape of min_q_target:", min_q_target.shape)
-                    print("Shape of min_q_target.squeeze():", min_q_target.squeeze().shape)
+
                     expanded_sampled_rewards = torch.FloatTensor(sampled_rewards).unsqueeze(1)
                     target_value = torch.FloatTensor(expanded_sampled_rewards) + gamma * min_q_target.squeeze()
 

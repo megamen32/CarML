@@ -147,30 +147,37 @@ def place_car_on_track(car, track_2D, start_index):
     # Set the car's velocity to make it head towards the centerline
     car.velocity = direction_vector
 
-def distance_to_centerline(car_position, segment_start, segment_end):
-    """
-    Compute the distance of the car to the centerline of the track segment.
 
-    Parameters:
-        car_position (array): The [x, y] position of the car.
-        segment_start (array): The [x1, y1] coordinates representing the start of the segment.
-        segment_end (array): The [x2, y2] coordinates representing the end of the segment.
+def distance_to_centerline(point, segment_start, segment_end):
+    A = np.array(segment_start)
+    B = np.array(segment_end)
+    C = np.array(point)
 
-    Returns:
-        distance (float): The distance of the car to the centerline of the segment.
-    """
-    x1, y1 = segment_start
-    x2, y2 = segment_end
-    x0, y0 = car_position
+    AB = B - A
+    AC = C - A
 
-    # Compute the distance from point to line (in 2D)
-    distance = abs((y2 - y1) * x0 - (x2 - x1) * y0 + x2 * y1 - y2 * x1) / np.sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
-    return distance
-def compute_distance_central_line(car, track_2D):
+    t = np.dot(AC, AB) / np.dot(AB, AB)
+
+    # Clamp t in the range [0, 1]
+    t = max(0, min(1, t))
+
+    closest_point = A + t * AB
+
+    distance = np.linalg.norm(closest_point - C)
+
+    return distance, closest_point
+
+
+def compute_distance_central_line(car, track_2D,time_step=1):
+    future_position = car.position + np.array(car.velocity) * time_step
     min_distance = float('inf')
+    closest_point_on_central_line = None
     for i in range(len(track_2D) - 1):
         segment_start = track_2D[i]
         segment_end = track_2D[i + 1]
-        distance = distance_to_centerline(car.position, segment_start, segment_end)
-        min_distance = min(min_distance, distance)
-    return min_distance
+        distance, closest_point = distance_to_centerline(future_position, segment_start, segment_end)
+        if distance < min_distance:
+            min_distance = distance
+            closest_point_on_central_line = closest_point
+    return min_distance, closest_point_on_central_line
+

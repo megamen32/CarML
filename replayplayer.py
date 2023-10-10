@@ -1,7 +1,7 @@
 # First, let's import the required libraries
 import pygame
 import numpy as np
-
+from main import compute_distance_central_line
 
 # Constants
 SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
@@ -160,7 +160,17 @@ def draw_track(  screen,track_2D,road_width):
         border_width = road_width // 2
         pygame.draw.line(screen, (200, 200, 200), (x1 + px * border_width, y1 + py * border_width), (x2 + px * border_width, y2 + py * border_width), 2)
         pygame.draw.line(screen, (200, 200, 200), (x1 - px * border_width, y1 - py * border_width), (x2 - px * border_width, y2 - py * border_width), 2)
-def draw_car(car, screen):
+def draw_car(car, screen, track_2D):
     car_position = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(car.position)]
     pygame.draw.circle(screen, (255, 0, 0), car_position, CAR_RADIUS)
+
+    # Compute distance to central line and closest point on central line
+    distance_to_central_line, closest_point_on_central_line = compute_distance_central_line(car, track_2D)
+
+    # Apply scaling and translation to the closest_point_on_central_line
+    closest_point_scaled = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(closest_point_on_central_line)]
+
+    pygame.draw.line(screen, (0, 255, 0), car_position, closest_point_scaled, 1)
+
+
 
