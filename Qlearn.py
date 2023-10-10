@@ -45,6 +45,9 @@ epsilon = 0.1  # Exploration rate
 
 # Initialize Q-Network and optimizer
 q_network = QNetwork(input_dim, output_dim)
+if os.path.exists('best_model.pth'):
+    q_network.load_state_dict(torch.load('best_model.pth'))
+
 target_q_network = TargetQNetwork(input_dim, output_dim)
 target_q_network.eval()
 optimizer = optim.Adam(q_network.parameters(), lr=learning_rate)
@@ -111,7 +114,7 @@ def advanced_reward_function(car, track_2D, collision):
 
     return reward
 # Modified batch training function with enhancements
-def enhanced_batch_q_learning(q_network, target_q_network, optimizer, criterion, num_cars=5, batch_size=32, n_episodes=100):
+def enhanced_batch_q_learning(q_network, target_q_network, optimizer, criterion, num_cars=50, batch_size=32, n_episodes=100):
     episode_rewards = []
     replay_buffer = []
     buffer_limit = 5000
@@ -153,22 +156,7 @@ def enhanced_batch_q_learning(q_network, target_q_network, optimizer, criterion,
 
             screen.fill((0, 0, 0))  # Fill the screen with black
 
-            # Draw the track
-            scaled_track = [(int(x * scale_factor + translation[0]), int(y * scale_factor + translation[1])) for x, y in track_2D]
-            for i in range(len(scaled_track) - 1):
-                x1, y1 = scaled_track[i]
-                x2, y2 = scaled_track[i + 1]
-                dx, dy = x2 - x1, y2 - y1
-
-                # Perpendicular vector for the border
-                px, py = -dy, dx
-                len_p = np.sqrt(px ** 2 + py ** 2)
-                px, py = px / len_p, py / len_p
-
-                # Draw the two borders
-                border_width = road_width // 2
-                pygame.draw.line(screen, (200, 200, 200), (x1 + px * border_width, y1 + py * border_width), (x2 + px * border_width, y2 + py * border_width), 2)
-                pygame.draw.line(screen, (200, 200, 200), (x1 - px * border_width, y1 - py * border_width), (x2 - px * border_width, y2 - py * border_width), 2)
+            draw_track(road_width, scale_factor, screen, translation)
             for i in range(num_cars):
                 if done_flags[i]:
                     continue  # Skip if this car is done
@@ -187,13 +175,13 @@ def enhanced_batch_q_learning(q_network, target_q_network, optimizer, criterion,
                     action[action_idx] = 1  # One-hot encoded action
 
                 # Step the environment
-                cars[i].update_position(delta_time=delta_time, acceleration=action[0], steering_angle=action[1])
-                next_state = get_state(cars[i])
-                collision, _ = check_collision_with_track(cars[i].position, track_2D, road_width=road_width)
-                reward = advanced_reward_function(cars[i],track_2D,collision)  # Placeholder reward function
+                car = cars[i]
+                car.update_position(delta_time=delta_time, acceleration=action[0], steering_angle=action[1])
+                next_state = get_state(car)
+                collision, _ = check_collision_with_track(car.position, track_2D, road_width=road_width)
+                reward = advanced_reward_function(car, track_2D, collision)  # Placeholder reward function
                 done_flags[i] = collision  # Episode ends for this car if there's a collision
-                car_position = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(cars[i].position)]
-                pygame.draw.circle(screen, (255, 0, 0), car_position, CAR_RADIUS)
+                draw_car(CAR_RADIUS, car, scale_factor, screen, translation)
 
                 # Store transition in replay buffer
                 replay_buffer.append((state, action, reward, next_state))
@@ -239,11 +227,15 @@ def enhanced_batch_q_learning(q_network, target_q_network, optimizer, criterion,
         print(f"Episode {episode + 1}: Total Reward: {episode_reward}, Epsilon: {epsilon}")
         if episode_reward > max_episode_reward:
             max_episode_reward = episode_reward
+            torch.save(q_network.state_dict(), 'best_model.pth')
             #visualize_game_with_pygame(episode_replay, track_2D)
 
     return episode_rewards
 
 
+def draw_car(CAR_RADIUS, car, scale_factor, screen, translation):
+    car_position = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(car.position)]
+    pygame.draw.circle(screen, (255, 0, 0), car_position, CAR_RADIUS)
 
 
 # The function is not run here but can be executed in your local environment.

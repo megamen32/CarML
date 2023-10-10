@@ -57,47 +57,43 @@ import math
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10.0, drag_coefficient=0.1):
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10.0, max_acceleration=1,drag_coefficient=0.1,max_steering_rate=0.1):
         self.position = position  # Position vector [x, y]
         self.velocity = velocity  # Velocity vector [vx, vy]
         self.mass = mass  # Mass of the car
         self.max_speed = max_speed  # Maximum speed
+        self.max_acceleration = max_acceleration # Maximum acceleration
         self.drag_coefficient = drag_coefficient  # Aerodynamic drag coefficient
+        self.current_steering_angle = 0.0  # New attribute
+        self.max_steering_rate = 0.1  # Maximum rate of change of steering angle per second
 
-    def update_position(self, delta_time, acceleration=np.array([0.0, 0.0]), steering_angle=0.0, road_width=10.0):
+    def update_position(self, delta_time, acceleration=0.0, steering_angle=0.0, road_width=10.0):
         # 1. Tire Friction and Acceleration
-        # Limit the acceleration based on tire friction (simplified model)
-        max_accel = 2.0  # Arbitrary max acceleration due to tire friction
-        acceleration_magnitude = np.linalg.norm(acceleration)
-        if acceleration_magnitude > max_accel:
-            acceleration = (acceleration / acceleration_magnitude) * max_accel
+        acceleration = min(acceleration, self.max_acceleration)
 
         # 2. Mass and Inertia
-        # F = m*a (Force is directly applied as acceleration; mass is considered in collision dynamics)
 
         # 3. Aerodynamic Drag
         speed = np.linalg.norm(self.velocity)
+        direction = self.velocity / speed if speed != 0 else np.array([1.0, 0.0])
+        acceleration_vector = acceleration * direction
         drag_force = -self.drag_coefficient * self.velocity * speed
 
         # 4. Steering and Turning Radius
-        # Change in heading direction due to steering angle (simplified to directly affect velocity)
-        rotation_matrix = np.array([[math.cos(steering_angle), -math.sin(steering_angle)],
-                                    [math.sin(steering_angle), math.cos(steering_angle)]])
+        steering_diff = steering_angle - self.current_steering_angle
+        steering_diff = np.clip(steering_diff, -self.max_steering_rate * delta_time, self.max_steering_rate * delta_time)
+        self.current_steering_angle += steering_diff
+
+        rotation_matrix = np.array([[math.cos(self.current_steering_angle), -math.sin(self.current_steering_angle)],
+                                    [math.sin(self.current_steering_angle), math.cos(self.current_steering_angle)]])
+
         self.velocity = np.dot(rotation_matrix, self.velocity)
 
         # 5. Update Velocity and Position
-        # v = u + a*t and s = u*t + 0.5*a*t^2
-        self.velocity += (acceleration + drag_force / self.mass) * delta_time
-        self.position += self.velocity * delta_time + 0.5 * acceleration * delta_time ** 2
-
-        # 6. Collision Physics
-        # Simple collision detection and elastic collision response
-        if abs(self.position[1]) > road_width / 2:
-            self.position[1] = np.sign(self.position[1]) * road_width / 2  # Reset position to boundary
-            self.velocity[1] = -0.5 * self.velocity[1]  # Simple elastic collision (50% energy loss)
+        self.velocity += (acceleration_vector + drag_force / self.mass) * delta_time
+        self.position += self.velocity * delta_time + 0.5 * acceleration_vector * delta_time ** 2
 
         # 7. Speed Caps
-        # Limit speed to max_speed
         speed = np.linalg.norm(self.velocity)
         if speed > self.max_speed:
             self.velocity = (self.velocity / speed) * self.max_speed
@@ -139,7 +135,7 @@ def place_car_on_track(car, track_2D, start_index):
     Returns:
         None: The car's position is updated in place.
     """
-    car.position = np.array(track_2D[start_index])
+    car.position = np.array(track_2D[start_index % len(track_2D)])
 
     # Compute the direction towards the next point in the track
     next_point = np.array(track_2D[(start_index + 1) % len(track_2D)])
@@ -150,3 +146,31 @@ def place_car_on_track(car, track_2D, start_index):
 
     # Set the car's velocity to make it head towards the centerline
     car.velocity = direction_vector
+
+def distance_to_centerline(car_position, segment_start, segment_end):
+    """
+    Compute the distance of the car to the centerline of the track segment.
+
+    Parameters:
+        car_position (array): The [x, y] position of the car.
+        segment_start (array): The [x1, y1] coordinates representing the start of the segment.
+        segment_end (array): The [x2, y2] coordinates representing the end of the segment.
+
+    Returns:
+        distance (float): The distance of the car to the centerline of the segment.
+    """
+    x1, y1 = segment_start
+    x2, y2 = segment_end
+    x0, y0 = car_position
+
+    # Compute the distance from point to line (in 2D)
+    distance = abs((y2 - y1) * x0 - (x2 - x1) * y0 + x2 * y1 - y2 * x1) / np.sqrt((y2 - y1) ** 2 + (x2 - x1) ** 2)
+    return distance
+def compute_distance_central_line(car, track_2D):
+    min_distance = float('inf')
+    for i in range(len(track_2D) - 1):
+        segment_start = track_2D[i]
+        segment_end = track_2D[i + 1]
+        distance = distance_to_centerline(car.position, segment_start, segment_end)
+        min_distance = min(min_distance, distance)
+    return min_distance
