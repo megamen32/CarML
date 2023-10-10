@@ -7,6 +7,7 @@ import pygame
 import numpy as np
 import matplotlib.pyplot as plt
 import os
+from replaybuffer import ReplayBuffer
 
 
 class QNetwork(nn.Module):
@@ -176,46 +177,47 @@ def enhanced_batch_q_learning(q_network, target_q_network, optimizer, criterion,
 
                 # Step the environment
                 car = cars[i]
-                car.update_position(delta_time=delta_time, acceleration=action[0], steering_angle=action[1])
-                next_state = get_state(car)
+                car.update_position(delta_time=delta_time, acceleration=action[0], steering_angle=action[1], road_width=road_width)
+                next_state = get_state(car, track_2D)
                 collision, _ = check_collision_with_track(car.position, track_2D, road_width=road_width)
-                reward = advanced_reward_function(car, track_2D, collision)  # Placeholder reward function
-                done_flags[i] = collision  # Episode ends for this car if there's a collision
-                draw_car(CAR_RADIUS, car, scale_factor, screen, translation)
+                reward = advanced_reward_function(car, track_2D, collision)
 
-                # Store transition in replay buffer
-                replay_buffer.append((state, action, reward, next_state))
+                # Store this experience into the Replay Buffer
+                replay_buffer.push(state, action, reward, next_state, collision)
+
+                # Update done flags and states
+                done_flags[i] = collision
+                states[i] = next_state
+                episode_reward += reward
+
+                draw_car(car, screen)
                 if len(replay_buffer) > buffer_limit:
                     replay_buffer.pop(0)  # Remove the oldest experience if the buffer is full
 
-                # Batch update Q-values if enough samples are available
-                if len(replay_buffer) >= batch_size:
-                    batch = random.sample(replay_buffer, batch_size)
-                    states_batch, actions_batch, rewards_batch, next_states_batch = zip(*batch)
-                    states_batch = torch.stack(states_batch)
-                    actions_batch = torch.FloatTensor(np.array(actions_batch))
+            # Batch update Q-values if enough samples are available
+            if len(replay_buffer) >= batch_size:
+                batch = random.sample(replay_buffer, batch_size)
+                states_batch, actions_batch, rewards_batch, next_states_batch = zip(*batch)
+                states_batch = torch.stack(states_batch)
+                actions_batch = torch.FloatTensor(np.array(actions_batch))
 
-                    rewards_batch = torch.FloatTensor(np.array(rewards_batch))
-                    next_states_batch = torch.stack(next_states_batch)
+                rewards_batch = torch.FloatTensor(np.array(rewards_batch))
+                next_states_batch = torch.stack(next_states_batch)
 
-                    with torch.no_grad():
-                        target_q_values = target_q_network(next_states_batch)
-                    targets = rewards_batch + gamma * target_q_values.max(dim=1)[0]
+                with torch.no_grad():
+                    target_q_values = target_q_network(next_states_batch)
+                targets = rewards_batch + gamma * target_q_values.max(dim=1)[0]
 
-                    q_values = q_network(states_batch).gather(1, torch.max(actions_batch, 1)[1].unsqueeze(-1)).squeeze()
-                    loss = criterion(q_values, targets)
-                    #print('Loss:',loss[0])
+                q_values = q_network(states_batch).gather(1, torch.max(actions_batch, 1)[1].unsqueeze(-1)).squeeze()
+                loss = criterion(q_values, targets)
+                #print('Loss:',loss[0])
 
-                    optimizer.zero_grad()
-                    loss.backward()
-                    optimizer.step()
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
 
-                    # Update the target network, copying all weights and biases in DQN
-                    target_q_network.update_from_model(q_network)
-
-                # Update state and episode reward
-                states[i] = next_state
-                episode_reward += reward
+                # Update the target network, copying all weights and biases in DQN
+                target_q_network.update_from_model(q_network)
             pygame.display.update()
             clock.tick(30)
 
