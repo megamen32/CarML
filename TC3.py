@@ -56,9 +56,17 @@ class PolicyNetwork(nn.Module):
         return torch.tanh(self.fc3(x))
 
 
+def get_state(car, track_2D):
+    _,fclosest_point = compute_distance_central_line(car, track_2D,2)  # Assuming you have this function implemented
+    _,closest_point = compute_distance_central_line(car, track_2D,0)  # Assuming you have this function implemented
+    fpoint_x,fpoint_y=fclosest_point
+    point_x,point_y=closest_point
+    position_x,position_y=car.position
+    speed_x,spped_y = car.velocity
+    return torch.FloatTensor([fpoint_x,fpoint_y,position_x,position_y ,speed_x,spped_y,point_x,point_y,car.current_steering_angle])
 
 # Hyperparameters
-input_dim = 7  # [ x_velocity, y_velocity,closest_point_x,closest_point_y,current_steering_angle]
+input_dim = len(get_state(RealisticCar2D(),track_2D))
 output_dim = 2  # [acceleration, turn_angle]
 learning_rate = 0.001
 gamma = 0.99  # Discount factor
@@ -76,12 +84,6 @@ if os.path.exists( twin_model_path):
 optimizer = optim.Adam(network.parameters(), lr=learning_rate)
 criterion = nn.MSELoss()
 
-def get_state(car, track_2D):
-    _,closest_point = compute_distance_central_line(car, track_2D)  # Assuming you have this function implemented
-    point_x,point_y=closest_point
-    position_x,position_y=car.position
-    speed_x,spped_y = car.velocity
-    return torch.FloatTensor([position_x,position_y ,speed_x,spped_y,point_x,point_y,car.current_steering_angle])
 
 # Function to perform Q-Learning within the racing environment with corrected action selection
 import math
@@ -92,7 +94,7 @@ import random
 
 
 # Update the advanced_reward_function to work with the new track representation
-def advanced_reward_function(car, track_2D, collision):
+def advanced_reward_function(car, track_2D, collision,time):
     """
     Computes an advanced reward based on the car's state and track information.
 
@@ -108,13 +110,14 @@ def advanced_reward_function(car, track_2D, collision):
         return -100.0  # Large negative reward for collision
 
     # Compute the distance to the centerline of the closest track segment
-    min_distance,_ = compute_distance_central_line(car, track_2D)
+    min_distance,_ = compute_distance_central_line(car, track_2D,0)
 
     # Compute the speed of the car
     speed = np.linalg.norm(car.velocity)
+    distance_per_life = car.distance_covered / time if time > 0 else 0
 
     # Reward based on staying close to the centerline and maintaining a reasonable speed
-    reward = 1.0 - 0.1 * min_distance + 0.2 * speed
+    reward = 1.0 - 0.1 * min_distance + 0.4 * speed + 0.5 * distance_per_life
 
     return reward
 
@@ -133,6 +136,7 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
     clock = pygame.time.Clock()
 
     episode_rewards = []
+    losses = []
     max_episode_reward = -math.inf
     max_time = 5000
     delta_time = 1
@@ -158,6 +162,7 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
         done_flags = [False] * num_cars
         episode_reward = 0
         time = 0
+        episode_loss = 0
 
 
 
@@ -188,7 +193,7 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
                 car.update_position(delta_time=delta_time, acceleration=action[0], steering_angle=action[1], road_width=road_width)
                 next_state = get_state(car, track_2D)
                 collision, _ = check_collision_with_track(car.position, track_2D, road_width=road_width)
-                reward = advanced_reward_function(car, track_2D, collision)
+                reward = advanced_reward_function(car, track_2D, collision,time)
 
                 # Store this experience into the Replay Buffer
                 state_array = np.array(state)
@@ -226,6 +231,7 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
                 loss_q1 = criterion(q1_values.squeeze(), target_value)
                 loss_q2 = criterion(q2_values.squeeze(), target_value)
                 loss_q = loss_q1 + loss_q2
+                episode_loss += loss_q.item()
 
                 optimizer.zero_grad()
                 loss_q.backward()
@@ -236,9 +242,9 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
 
         # Decay epsilon
         epsilon = max(min_epsilon, epsilon * epsilon_decay)
-
+        losses.append(episode_loss / time)  # averaging over the episode
         episode_rewards.append(episode_reward)
-        print(f"Episode {episode + 1}: Total Reward: {episode_reward}, Epsilon: {epsilon}")
+        print(f"Episode {episode + 1}: Total Reward: {episode_reward},  Avg Loss: {episode_loss / time}, Epsilon: {epsilon}")
         if episode_reward > max_episode_reward:
             max_episode_reward = episode_reward
             torch.save(q_network.state_dict(), twin_model_path)

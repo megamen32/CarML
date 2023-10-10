@@ -57,7 +57,7 @@ import math
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10.0, max_acceleration=1,drag_coefficient=0.1,max_steering_rate=0.1):
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10.0, max_acceleration=1,drag_coefficient=0.001,max_steering_rate=0.1):
         self.position = position  # Position vector [x, y]
         self.velocity = velocity  # Velocity vector [vx, vy]
         self.mass = mass  # Mass of the car
@@ -66,8 +66,10 @@ class RealisticCar2D:
         self.drag_coefficient = drag_coefficient  # Aerodynamic drag coefficient
         self.current_steering_angle = 0.0  # New attribute
         self.max_steering_rate = 0.1  # Maximum rate of change of steering angle per second
+        self.distance_covered=0
 
     def update_position(self, delta_time, acceleration=0.0, steering_angle=0.0, road_width=10.0):
+        old_position = self.position.copy()
         # 1. Tire Friction and Acceleration
         acceleration = min(acceleration, self.max_acceleration)
 
@@ -97,6 +99,8 @@ class RealisticCar2D:
         speed = np.linalg.norm(self.velocity)
         if speed > self.max_speed:
             self.velocity = (self.velocity / speed) * self.max_speed
+        distance_moved = np.linalg.norm(np.array(self.position) - np.array(old_position))
+        self.distance_covered += distance_moved
 
 
 def check_collision_with_track(car_position, track_2D, road_width):
