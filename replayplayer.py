@@ -171,6 +171,8 @@ def draw_car(car, screen, track_2D):
     closest_point_scaled = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(closest_point_on_central_line)]
 
     pygame.draw.line(screen, (0, 255, 0), car_position, closest_point_scaled, 1)
-
+    goal = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[car.closest_point_idx])]
+    pygame.draw.circle(screen, (0, 0, 255), goal, 4)
+    #pygame.draw.line(screen, (0, 0, 255), car_position, goal, 1)
 
 

@@ -31,6 +31,40 @@ def create_loop_track(radius=100, num_segments=100):
         track_2D.append([x, y])
     track_2D.append(track_2D[0])  # Close the loop
     return track_2D
+import numpy as np
+
+def create_double_loop_track(radius1=100, radius2=50, num_segments=100):
+    """
+    Create a double loop track with two different radii and number of segments.
+
+    Parameters:
+        radius1 (int): The radius of the first loop.
+        radius2 (int): The radius of the second loop.
+        num_segments (int): The number of segments to divide each loop into.
+
+    Returns:
+        track_2D (list): A list of [x, y] coordinates representing the double loop track.
+    """
+    track_2D = []
+    # Create the first loop
+    for i in range(num_segments):
+        angle = i * 2 * np.pi / num_segments
+        x = radius1 * np.cos(angle)
+        y = radius1 * np.sin(angle)
+        track_2D.append([x, y])
+
+    # Create the second loop with an offset to avoid overlap
+    offset_x, offset_y = radius1 * 2 + radius2, 0
+    for i in range(num_segments):
+        angle = i * 2 * np.pi / num_segments
+        x = radius2 * np.cos(angle) + offset_x
+        y = radius2 * np.sin(angle) + offset_y
+        track_2D.append([x, y])
+
+    return track_2D
+
+
+
 # Decode track into 2D coordinates for visualization (or for more advanced physics)
 def decode_track_to_2D(track, segment_length=1.0):
     x, y = 0, 0  # Initialize coordinates
@@ -49,15 +83,41 @@ def decode_track_to_2D(track, segment_length=1.0):
 
     return track_2D
 
+def create_circular_track(radius, start_angle, end_angle, num_segments):
+    angles = np.linspace(start_angle, end_angle, num_segments)
+    x = radius * np.cos(angles)
+    y = radius * np.sin(angles)
+    return list(zip(x, y))
+def make_strange_trace():
+    # Create the first circle
+    first_circle_radius = 100
+    first_circle_segments = 100
+    first_circle = create_circular_track(first_circle_radius, 0, -2 * np.pi, first_circle_segments)
+
+    # Remove last 25% to make space for the second circle
+    first_circle = first_circle[:int(0.75 * len(first_circle))]
+
+    final_track = first_circle
+    return final_track
+
+def compute_track_length(track_2D):
+    return sum(np.linalg.norm(np.array(track_2D[i]) - np.array(track_2D[i - 1])) for i in range(1, len(track_2D)))
+
+def compute_travel_distance(track_2D, closest_point, closest_point_idx):
+    distance_to_segment_start = sum(np.linalg.norm(np.array(track_2D[i]) - np.array(track_2D[i - 1])) for i in range(1, closest_point_idx))
+    distance_within_segment = np.linalg.norm(np.array(closest_point) - np.array(track_2D[closest_point_idx]))
+    return distance_to_segment_start + distance_within_segment
+
+
 #track_2D=decode_track_to_2D(track)
-track_2D=create_loop_track()
+track_2D=make_strange_trace()
 # Importing required libraries
 import math
 
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10.0, max_acceleration=1,drag_coefficient=0.001,max_steering_rate=0.1):
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=0.1, max_acceleration=0.001,drag_coefficient=0,max_steering_rate=0.01):
         self.position = position  # Position vector [x, y]
         self.velocity = velocity  # Velocity vector [vx, vy]
         self.mass = mass  # Mass of the car
@@ -65,19 +125,24 @@ class RealisticCar2D:
         self.max_acceleration = max_acceleration # Maximum acceleration
         self.drag_coefficient = drag_coefficient  # Aerodynamic drag coefficient
         self.current_steering_angle = 0.0  # New attribute
-        self.max_steering_rate = 0.1  # Maximum rate of change of steering angle per second
-        self.distance_covered=0
+        self.max_steering_rate = max_steering_rate # Maximum rate of change of steering angle per second
+        self.max_acceleration_rate = 0.00001  # Maximum rate of change of steering angle per second
+        self.acceleration = 0 # Acceleration
+        self.closest_point_idx = 0
 
     def update_position(self, delta_time, acceleration=0.0, steering_angle=0.0, road_width=10.0):
         old_position = self.position.copy()
         # 1. Tire Friction and Acceleration
-        acceleration = min(acceleration, self.max_acceleration)
 
         # 2. Mass and Inertia
+        acc_diff = acceleration - self.acceleration
+        acc_diff = np.clip(acc_diff, -self.max_acceleration_rate * delta_time, self.max_acceleration_rate * delta_time)
+        self.acceleration += acc_diff
+        self.acceleration = min(max(-self.max_acceleration, self.acceleration), self.max_acceleration)
 
         # 3. Aerodynamic Drag
         speed = np.linalg.norm(self.velocity)
-        direction = self.velocity / speed if speed != 0 else np.array([1.0, 0.0])
+        direction = self.velocity / speed if speed != 0 else np.array([0.0, 1.0])
         acceleration_vector = acceleration * direction
         drag_force = -self.drag_coefficient * self.velocity * speed
 
@@ -99,8 +164,7 @@ class RealisticCar2D:
         speed = np.linalg.norm(self.velocity)
         if speed > self.max_speed:
             self.velocity = (self.velocity / speed) * self.max_speed
-        distance_moved = np.linalg.norm(np.array(self.position) - np.array(old_position))
-        self.distance_covered += distance_moved
+        self.closest_point_idx = compute_closest_point_idx(self, track_2D)
 
 
 def check_collision_with_track(car_position, track_2D, road_width):
@@ -149,7 +213,7 @@ def place_car_on_track(car, track_2D, start_index):
     direction_vector /= np.linalg.norm(direction_vector)
 
     # Set the car's velocity to make it head towards the centerline
-    car.velocity = direction_vector
+    car.velocity = direction_vector*0.000001
 
 
 def distance_to_centerline(point, segment_start, segment_end):
@@ -185,3 +249,12 @@ def compute_distance_central_line(car, track_2D,time_step=1):
             closest_point_on_central_line = closest_point
     return min_distance, closest_point_on_central_line
 
+def compute_closest_point_idx(car, track_2D):
+    min_distance = float('inf')
+    closest_idx = 0
+    for i in range(len(track_2D)-1):
+        distance,_ = distance_to_centerline(car.position, track_2D[i], track_2D[(i + 1) ])
+        if distance < min_distance:
+            min_distance = distance
+            closest_idx = i
+    return closest_idx
