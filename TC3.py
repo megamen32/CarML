@@ -66,16 +66,16 @@ class PolicyNetwork(nn.Module):
 
 
 def get_state(car, track_2D):
-    _,fclosest_point = compute_distance_central_line(car, track_2D,10)  # Assuming you have this function implemented
+    fclosest_point = track_2D[(car.closest_point_idx+1)%len(track_2D)]  # Assuming you have this function implemented
     _,closest_point = compute_distance_central_line(car, track_2D,0)  # Assuming you have this function implemented
     fpoint_x,fpoint_y=fclosest_point
     point_x,point_y=closest_point
-    position_x,position_y=car.position
+    accelration=car.acceleration
     speed_x,spped_y = car.velocity
-    return torch.FloatTensor([fpoint_x,fpoint_y,position_x,position_y ,speed_x,spped_y,point_x,point_y,car.current_steering_angle])
+    return torch.FloatTensor([fpoint_x,fpoint_y,accelration ,speed_x,spped_y,point_x,point_y,car.current_steering_angle])
 
 # Hyperparameters
-input_dim = 9#len(get_state(RealisticCar2D(),track_2D))
+input_dim = 8#len(get_state(RealisticCar2D(),track_2D))
 output_dim = 2  # [acceleration, turn_angle]
 initial_learning_rate = 0.01
 min_learning_rate = 0.00001
@@ -138,7 +138,7 @@ def advanced_reward_function(car, track_2D, collision, time, prev_closest_point_
 # Modified batch training function with enhancements
 import pygame
 
-def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_cars=2, n_episodes=10000):
+def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_cars=10, n_episodes=10000):
     global learning_rate
     # Pygame initialization
     pygame.init()
