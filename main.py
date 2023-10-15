@@ -117,7 +117,7 @@ import math
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=0.1, max_acceleration=0.001,drag_coefficient=0,max_steering_rate=0.01):
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=1, max_acceleration=1,drag_coefficient=0,max_steering_rate=0.1):
         self.position = position  # Position vector [x, y]
         self.velocity = velocity  # Velocity vector [vx, vy]
         self.mass = mass  # Mass of the car
@@ -126,9 +126,11 @@ class RealisticCar2D:
         self.drag_coefficient = drag_coefficient  # Aerodynamic drag coefficient
         self.current_steering_angle = 0.0  # New attribute
         self.max_steering_rate = max_steering_rate # Maximum rate of change of steering angle per second
-        self.max_acceleration_rate = 0.00001  # Maximum rate of change of steering angle per second
+        self.max_acceleration_rate = 1  # Maximum rate of change of steering angle per second
         self.acceleration = 0 # Acceleration
         self.closest_point_idx = 0
+        self.distance_to_central=0
+        self.speed=0#read-only
 
     def update_position(self, delta_time, acceleration=0.0, steering_angle=0.0, road_width=10.0):
         old_position = self.position.copy()
@@ -143,7 +145,7 @@ class RealisticCar2D:
         # 3. Aerodynamic Drag
         speed = np.linalg.norm(self.velocity)
         direction = self.velocity / speed if speed != 0 else np.array([0.0, 1.0])
-        acceleration_vector = acceleration * direction
+        acceleration_vector = self.acceleration * direction
         drag_force = -self.drag_coefficient * self.velocity * speed
 
         # 4. Steering and Turning Radius
@@ -161,10 +163,10 @@ class RealisticCar2D:
         self.position += self.velocity * delta_time + 0.5 * acceleration_vector * delta_time ** 2
 
         # 7. Speed Caps
-        speed = np.linalg.norm(self.velocity)
-        if speed > self.max_speed:
-            self.velocity = (self.velocity / speed) * self.max_speed
-        self.closest_point_idx = compute_closest_point_idx(self, track_2D)
+        self.speed = np.linalg.norm(self.velocity)
+        if self.speed > self.max_speed:
+            self.velocity = (self.velocity / self.speed) * self.max_speed
+        self.closest_point_idx ,self.distance_to_central= compute_closest_point_idx(self, track_2D)
 
 
 def check_collision_with_track(car_position, track_2D, road_width):
@@ -214,6 +216,7 @@ def place_car_on_track(car, track_2D, start_index):
 
     # Set the car's velocity to make it head towards the centerline
     car.velocity = direction_vector*0.000001
+    car.closest_point_idx=start_index
 
 
 def distance_to_centerline(point, segment_start, segment_end):
@@ -257,4 +260,4 @@ def compute_closest_point_idx(car, track_2D):
         if distance < min_distance:
             min_distance = distance
             closest_idx = i
-    return closest_idx
+    return closest_idx,min_distance

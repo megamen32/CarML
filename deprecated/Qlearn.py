@@ -46,7 +46,7 @@ epsilon = 0.1  # Exploration rate
 
 # Initialize Q-Network and optimizer
 q_network = QNetwork(input_dim, output_dim)
-if os.path.exists('best_model.pth'):
+if os.path.exists('../best_model.pth'):
     q_network.load_state_dict(torch.load('best_model.pth'))
 
 target_q_network = TargetQNetwork(input_dim, output_dim)
@@ -229,7 +229,7 @@ def enhanced_batch_q_learning(q_network, target_q_network, optimizer, criterion,
         print(f"Episode {episode + 1}: Total Reward: {episode_reward}, Epsilon: {epsilon}")
         if episode_reward > max_episode_reward:
             max_episode_reward = episode_reward
-            torch.save(q_network.state_dict(), 'best_model.pth')
+            torch.save(q_network.state_dict(), '../best_model.pth')
             #visualize_game_with_pygame(episode_replay, track_2D)
 
     return episode_rewards

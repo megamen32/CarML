@@ -7,7 +7,7 @@ import pygame
 import numpy as np
 from replayplayer import draw_track,SCREEN_HEIGHT,SCREEN_WIDTH,scale_factor,init_screen,translation,draw_car,plot_track_and_cars
 import os
-from replaybuffer import ReplayBuffer
+from replaybuffer import ReplayBuffer,PriorityReplayBuffer
 
 policy_model_path = 'best_policy_model.pth'
 def save_model(model, optimizer, filename, learning_rate, noise_std):
@@ -32,16 +32,13 @@ class TwinQNetwork(nn.Module):
         self.q1 = nn.Sequential(
             nn.Linear(input_dim, 64), nn.ReLU(),
             nn.Linear(64, 64), nn.ReLU(),
-            nn.Linear(64, output_dim)
-        )
-        self.q2 = nn.Sequential(
-            nn.Linear(input_dim, 64), nn.ReLU(),
             nn.Linear(64, 64), nn.ReLU(),
-            nn.Linear(64, output_dim)
+            nn.Linear(64, output_dim),nn.Tanh()
         )
 
+
     def forward(self, state):
-        return self.q1(state), self.q2(state)
+        return self.q1(state)
 class TargetQNetwork(TwinQNetwork):
     def __init__(self, input_dim, output_dim):
         super(TargetQNetwork, self).__init__(input_dim, output_dim)
@@ -57,6 +54,7 @@ class PolicyNetwork(nn.Module):
         self.q1=nn.Sequential(
             nn.Linear(input_dim, 64), nn.ReLU(),
             nn.Linear(64, 64), nn.ReLU(),
+            nn.Linear(64, 64), nn.ReLU(),
             nn.Linear(64, output_dim),nn.Tanh()
         )
 
@@ -67,15 +65,16 @@ class PolicyNetwork(nn.Module):
 
 def get_state(car, track_2D):
     fclosest_point = track_2D[(car.closest_point_idx+1)%len(track_2D)]  # Assuming you have this function implemented
-    _,closest_point = compute_distance_central_line(car, track_2D,0)  # Assuming you have this function implemented
+    distance,closest_point = compute_distance_central_line(car, track_2D,0)  # Assuming you have this function implemented
     fpoint_x,fpoint_y=fclosest_point
-    point_x,point_y=closest_point
+    point_x,point_y= track_2D[(car.closest_point_idx)]
     accelration=car.acceleration
     speed_x,spped_y = car.velocity
-    return torch.FloatTensor([fpoint_x,fpoint_y,accelration ,speed_x,spped_y,point_x,point_y,car.current_steering_angle])
+    posx,posy=car.position
+    return torch.FloatTensor([distance,posx,posy,fpoint_x,fpoint_y,accelration ,speed_x,spped_y,point_x,point_y,car.current_steering_angle])
 
 # Hyperparameters
-input_dim = 8#len(get_state(RealisticCar2D(),track_2D))
+input_dim = 11#len(get_state(RealisticCar2D(),track_2D))
 output_dim = 2  # [acceleration, turn_angle]
 initial_learning_rate = 0.01
 min_learning_rate = 0.00001
@@ -85,6 +84,8 @@ min_noise_std = 0.05
 max_noise_std=0.5
 gamma = 0.7  # Discount factor
 batch_size=256
+max_time = 100
+road_width = 30
 # Initialize Q-Network and optimizer
 network = TwinQNetwork(input_dim, output_dim)
 policy_network=PolicyNetwork(input_dim, output_dim)
@@ -106,56 +107,68 @@ criterion = nn.MSELoss()
 import math
 import random
 
-
+total_track_length = compute_track_length(track_2D)
 def advanced_reward_function(car, track_2D, collision, time, prev_closest_point_idx):
     collision_penalty=0
     if collision:
-        collision_penalty= -100.0
+        collision_penalty= -10000.0
         return collision_penalty,car.closest_point_idx
 
-    min_distance, closest_point = compute_distance_central_line(car, track_2D, 0)
-    speed = np.linalg.norm(car.velocity)
+    min_distance=car.distance_to_central
+    speed = car.speed
 
-    total_track_length = compute_track_length(track_2D)
-    distance = compute_travel_distance(track_2D, closest_point, car.closest_point_idx)
+
+    distance=-1
     #normalized_progress = distance_to_closest_point / total_track_length
 
     backward_penalty = 0
     if car.closest_point_idx < prev_closest_point_idx:
-        backward_penalty = -50.0  # Выберите значение штрафа, которое вам подходит
+        backward_penalty = -500.0  # Выберите значение штрафа, которое вам подходит
         return -backward_penalty,car.closest_point_idx
+    elif  car.closest_point_idx > prev_closest_point_idx:
+        distance = compute_travel_distance(track_2D, track_2D[car.closest_point_idx], car.closest_point_idx)
 
     finish_reward = 0
     if car.closest_point_idx == len(track_2D) - 1:
-        finish_reward = 5000 / time
+        finish_reward = 500000 / time
         print('finish!', finish_reward, time)
 
-    reward = distance + finish_reward + backward_penalty +collision_penalty+(1-min_distance)*0.1+speed*0.1
+    center_reward = (road_width - min_distance) /road_width
+    reward = distance * 2 + finish_reward + backward_penalty + collision_penalty + center_reward + speed - time / max_time
 
     return reward, car.closest_point_idx
 
 
 # Modified batch training function with enhancements
 import pygame
-
+import pygame_gui
 def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_cars=10, n_episodes=10000):
     global learning_rate
+    global gamma
     # Pygame initialization
     pygame.init()
 
-    screen = init_screen()
+    screen,manager = init_screen()
+    # Add sliders for learning rate and noise factor
+    noise_std = initial_noise_std
+    delta_time = 1
+    learning_rate_slider = pygame_gui.elements.UIHorizontalSlider(pygame.Rect((SCREEN_WIDTH - 400, 50), (300, 20)),learning_rate, (min_learning_rate,0.5), manager)
+    noise_factor_slider = pygame_gui.elements.UIHorizontalSlider(pygame.Rect((SCREEN_WIDTH - 400, 100), (300, 20)), noise_std, (0.0, 3.0), manager)
+    gamma_factor_slider = pygame_gui.elements.UIHorizontalSlider(pygame.Rect((SCREEN_WIDTH - 400, 150), (300, 20)),gamma, (0.0, 1.0), manager)
+    delta_slider = pygame_gui.elements.UIHorizontalSlider(pygame.Rect((SCREEN_WIDTH - 400, 200), (300, 20)),delta_time, (0.0, 1.0), manager)
+
     clock = pygame.time.Clock()
 
     episode_rewards = []
     last_100_rewards=[]
     losses = []
     max_episode_reward = -math.inf
-    max_time = 5000
-    delta_time = 1
+
+
     previous_avg_reward=-math.inf
-    noise_std = initial_noise_std
-    road_width = 30
-    replay_buffer = ReplayBuffer(5000)
+
+
+    replay_buffer = PriorityReplayBuffer(5000)
 
 
 
@@ -175,40 +188,60 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
         time = 0
         episode_loss = 0
         episode_trainig_count=0
-        prev_closest_point_idx = [compute_closest_point_idx(cars[_],track_2D) for _ in range(num_cars)]
+        prev_closest_point_idx = [compute_closest_point_idx(cars[_],track_2D)[0] for _ in range(num_cars)]
 
 
 
         while not all(done_flags) and time < max_time:
             time += delta_time
 
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     pygame.quit()
                     return
+                manager.process_events(event)
+                if event.type == pygame.USEREVENT:
+                    if event.user_type == pygame_gui.UI_HORIZONTAL_SLIDER_MOVED:
+                        if event.ui_element == learning_rate_slider:
+                            learning_rate = learning_rate_slider.get_current_value()
+                            for param_group in optimizer.param_groups:
+                                param_group['lr'] = learning_rate
+                        if event.ui_element == noise_factor_slider:
+                            noise_std = noise_factor_slider.get_current_value()
+                        if event.ui_element == gamma_factor_slider:
+                            gamma = gamma_factor_slider.get_current_value()
+                        if event.ui_element == delta_slider:
+                            delta_time = delta_slider.get_current_value()
+            manager.update(delta_time)
 
 
             # Your track drawing code here
             draw_track(screen,track_2D,road_width)
+
 
             for i in range(num_cars):
                 if done_flags[i]:
                     continue
 
                 state = states[i]
-                action = policy_network(state.unsqueeze(0)).squeeze().detach().numpy()
+                #action = q_network(state.unsqueeze(0)).detach().numpy()
+                action = policy_network(state).detach().numpy()
                 noise = np.random.normal(0, noise_std, size=action.shape)
                 action += noise
 
                 car = cars[i]
-                car.update_position(delta_time=delta_time, acceleration=action[0], steering_angle=action[1], road_width=road_width)
+                car.update_position(delta_time=delta_time, acceleration=action[ 0], steering_angle=action[1], road_width=road_width)
+
+                #car.update_position(delta_time=delta_time, acceleration=action[0], steering_angle=action[1], road_width=road_width)
                 next_state = get_state(car, track_2D)
                 collision, _ = check_collision_with_track(car.position, track_2D, road_width=road_width)
                 reward,new_closest_point_idx = advanced_reward_function(car, track_2D, collision,time,prev_closest_point_idx[i])
                 prev_closest_point_idx[i] = new_closest_point_idx
                 # Store this experience into the Replay Buffer
                 state_array = np.array(state)
-                replay_buffer.push(state, action, reward, next_state, collision)
+                replay_buffer.add(state, action, reward, next_state, collision)
+
 
                 # Update done flags and states
                 done_flags[i] = collision
@@ -218,6 +251,11 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
                 # Draw the car
                 draw_car(car, screen,track_2D)
 
+            my_font = pygame.font.SysFont("arial", 24)
+            metrics_surface = my_font.render(f"lr: {learning_rate}, noise: {noise_std}, gamma: {gamma}, t:{delta_time}", True, (255, 255, 255))
+            screen.blit(metrics_surface, (10, 10))
+
+            manager.draw_ui(screen)
             pygame.display.update()
             if len(replay_buffer) >= batch_size and int(time)%5==0:
                 episode_trainig_count+=1
@@ -253,6 +291,7 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
             last_100_rewards=last_100_rewards[-50:]
 
         if episode_reward > max_episode_reward:
+            target_q_network.update_from_model(q_network)
 
             max_episode_reward = episode_reward
             torch.save(q_network.state_dict(), twin_model_path)
@@ -262,30 +301,44 @@ def enhanced_q_learning(q_network, target_q_network, optimizer, criterion, num_c
     return episode_rewards
 
 
-def train_batch(criterion, episode_loss, optimizer, q_network, replay_buffer, target_q_network):
-    sampled_states, sampled_actions, sampled_rewards, sampled_next_states, sampled_dones = replay_buffer.sample(batch_size)
+def train_batch(criterion, episode_loss, optimizer, q_network, replay_buffer, target_q_network,beta=0.5):
+    expirience, indices, priorities = replay_buffer.sample(batch_size)
+    sampled_states, sampled_actions, sampled_rewards, sampled_next_states, sampled_dones = zip(*expirience)
+    probs = priorities / replay_buffer.total_priority()
+
+    weights = (len(replay_buffer) * probs) ** (-beta)
+    max_val = weights.max()
+    if not isinstance(max_val, (int, float, np.number)):
+        print(f"Warning: Invalid type encountered: {type(max_val)}")
+    else:
+        weights = weights / max_val
+
     sampled_next_states_array = np.vstack(sampled_next_states)
     # Then convert it to a PyTorch tensor
     sampled_next_states_tensor = torch.FloatTensor(sampled_next_states_array)
     # Compute target Q-values using both the target Q-Networks
     with torch.no_grad():
         next_actions = policy_network(sampled_next_states_tensor)
-        q1_target, q2_target = target_q_network(sampled_next_states_tensor)
-        min_q_target = torch.min(q1_target, q2_target)
+        q1_target = target_q_network(sampled_next_states_tensor)
+        min_q_target = torch.min(q1_target)
 
         expanded_sampled_rewards = torch.FloatTensor(sampled_rewards).unsqueeze(1)
         target_value = torch.FloatTensor(expanded_sampled_rewards) + gamma * min_q_target.squeeze()
     # Compute current Q-values
-    q1_values, q2_values = q_network(sampled_next_states_tensor)
-    loss_q1 = criterion(q1_values.squeeze(), target_value)
-    loss_q2 = criterion(q2_values.squeeze(), target_value)
-    loss_q = loss_q1 + loss_q2
+    q1_values= q_network(sampled_next_states_tensor)
+    loss_q1 = (torch.FloatTensor(weights).unsqueeze(1) * criterion(q1_values.squeeze(), target_value)).mean()
+
+
+    loss_q = loss_q1
     episode_loss += loss_q.item()
     optimizer.zero_grad()
     loss_q.backward()
     optimizer.step()
     # Update the target network
-    target_q_network.update_from_model(q_network)
+
+    loss_errors = torch.abs(target_value.detach() - q1_values.detach().squeeze()).cpu().numpy()
+    loss_errors_summed = np.sum(loss_errors, axis=1)
+    replay_buffer.update_priorities(indices, loss_errors_summed)
     return episode_loss
 
 

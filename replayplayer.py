@@ -8,13 +8,18 @@ SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
 translation = [SCREEN_WIDTH // 4+100, SCREEN_HEIGHT // 4+100]
 CAR_RADIUS = 5
 scale_factor=1
-
-
+# Import additional pygame modules
+import pygame_gui
+manager=None
 def init_screen():
+    global manager
     # Initialize screen
     screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
     pygame.display.set_caption('Racing Game Visualization')
-    return screen
+    manager = pygame_gui.UIManager((SCREEN_WIDTH, SCREEN_HEIGHT))
+
+
+    return screen,manager
 
 # Function to visualize the game using Pygame
 def visualize_game_with_pygame(replay, track_2D):
@@ -143,6 +148,7 @@ def save_replay(replay, track_2D, episode_num, folder='replays'):
         plt.savefig(f"{folder}/episode_{episode_num}_frame_{i + 1}.png")
         plt.close()
 def draw_track(  screen,track_2D,road_width):
+    global manager
     screen.fill((0, 0, 0))  # Fill the screen with black
     # Draw the track
     scaled_track = [(int(x * scale_factor + translation[0]), int(y * scale_factor + translation[1])) for x, y in track_2D]
@@ -160,6 +166,10 @@ def draw_track(  screen,track_2D,road_width):
         border_width = road_width // 2
         pygame.draw.line(screen, (200, 200, 200), (x1 + px * border_width, y1 + py * border_width), (x2 + px * border_width, y2 + py * border_width), 2)
         pygame.draw.line(screen, (200, 200, 200), (x1 - px * border_width, y1 - py * border_width), (x2 - px * border_width, y2 - py * border_width), 2)
+    # Additional code to display current metrics
+
+
+
 def draw_car(car, screen, track_2D):
     car_position = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(car.position)]
     pygame.draw.circle(screen, (255, 0, 0), car_position, CAR_RADIUS)
@@ -167,11 +177,11 @@ def draw_car(car, screen, track_2D):
     # Compute distance to central line and closest point on central line
 
     # Apply scaling and translation to the closest_point_on_central_line
-    goal = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[car.closest_point_idx+1])]
-    pygame.draw.circle(screen, (0,255, 0), goal, 3)
+    #goal = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[car.closest_point_idx+1])]
+    #pygame.draw.circle(screen, (0,255, 0), goal, 3)
     #pygame.draw.line(screen, (0, 255, 0), car_position, closest_point_scaled, 1)
-    cur_segment = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[car.closest_point_idx])]
-    pygame.draw.circle(screen, (0, 0, 255), cur_segment, 4)
+    #cur_segment = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[car.closest_point_idx])]
+    #pygame.draw.circle(screen, (0, 0, 255), cur_segment, 4)
     #pygame.draw.line(screen, (0, 0, 255), car_position, goal, 1)
 
 
