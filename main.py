@@ -1,4 +1,6 @@
 # Importing required libraries
+import random
+
 import numpy as np
 
 # Improved Track Representation
@@ -83,19 +85,29 @@ def decode_track_to_2D(track, segment_length=1.0):
 
     return track_2D
 
-def create_circular_track(radius, start_angle, end_angle, num_segments):
+def create_circular_track(radius, road_width, start_angle=0, end_angle=3/2 * np.pi):
+    # Calculate the circumference of the circle
+    circumference = 2 * np.pi * radius
+
+    # Determine the number of segments based on the circumference and road width
+    num_segments = int(circumference / road_width)
+
+    # Generate the circular track
     angles = np.linspace(start_angle, end_angle, num_segments)
     x = radius * np.cos(angles)
     y = radius * np.sin(angles)
-    return list(zip(x, y))
-def make_strange_trace():
-    # Create the first circle
-    first_circle_radius = 100
-    first_circle_segments = 100
-    first_circle = create_circular_track(first_circle_radius, 0, -2 * np.pi, first_circle_segments)
 
-    # Remove last 25% to make space for the second circle
-    first_circle = first_circle[:int(0.75 * len(first_circle))]
+    return list(zip(x, y))
+
+def make_strange_trace(forward=True,road_width = 10):
+    # Create the first circle
+    first_circle_radius =random.randint(59,200)
+    first_circle_segments = 100
+    if forward:
+        first_circle = create_circular_track(first_circle_radius,  road_width)
+    else:
+        first_circle = create_circular_track(first_circle_radius,  road_width,0,-3/2*np.pi)
+# Remove last 25% to make space for the second circle
 
     final_track = first_circle
     return final_track
@@ -110,14 +122,14 @@ def compute_travel_distance(track_2D, closest_point, closest_point_idx):
 
 
 #track_2D=decode_track_to_2D(track)
-track_2D=make_strange_trace()
+
 # Importing required libraries
 import math
 
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=1, max_acceleration=1,drag_coefficient=0,max_steering_rate=0.1):
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=1,drag_coefficient=0,max_steering_rate=0.01):
         self.position = position  # Position vector [x, y]
         self.velocity = velocity  # Velocity vector [vx, vy]
         self.mass = mass  # Mass of the car
@@ -126,14 +138,14 @@ class RealisticCar2D:
         self.drag_coefficient = drag_coefficient  # Aerodynamic drag coefficient
         self.current_steering_angle = 0.0  # New attribute
         self.max_steering_rate = max_steering_rate # Maximum rate of change of steering angle per second
-        self.max_acceleration_rate = 1  # Maximum rate of change of steering angle per second
+        self.max_acceleration_rate = 0.1  # Maximum rate of change of steering angle per second
         self.acceleration = 0 # Acceleration
         self.closest_point_idx = 0#read-only
         self.distance_to_central=0#read-only
         self.speed=0#read-only
         self.lastest_point_idx=0#read-only
 
-    def update_position(self, delta_time, acceleration=0.0, steering_angle=0.0, road_width=10.0):
+    def update_position(self, delta_time,track_2D, acceleration=0.0, steering_angle=0.0, road_width=10.0):
         old_position = self.position.copy()
         # 1. Tire Friction and Acceleration
 
@@ -217,7 +229,8 @@ def place_car_on_track(car, track_2D, start_index):
     direction_vector /= np.linalg.norm(direction_vector)
 
     # Set the car's velocity to make it head towards the centerline
-    car.velocity = direction_vector*0.000001
+    car.velocity = direction_vector
+    car.acceleration=0.51
     car.closest_point_idx=start_index
 
 
