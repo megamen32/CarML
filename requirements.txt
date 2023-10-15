@@ -1,2 +1,6 @@
 numpy
 torch
+gym
+gym[box2d]
+pygame_gui
+pygame

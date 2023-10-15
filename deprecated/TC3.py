@@ -134,7 +134,7 @@ def advanced_reward_function(car, track_2D, collision, time, prev_closest_point_
         print('finish!', finish_reward, time)
 
     center_reward = (road_width - min_distance) /road_width
-    reward = distance * 2 + finish_reward + backward_penalty + collision_penalty + center_reward + speed - time / max_time
+    reward = distance * 2 + finish_reward + backward_penalty + collision_penalty  + speed - time / max_time
 
     return reward, car.closest_point_idx
 

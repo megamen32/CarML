@@ -128,9 +128,10 @@ class RealisticCar2D:
         self.max_steering_rate = max_steering_rate # Maximum rate of change of steering angle per second
         self.max_acceleration_rate = 1  # Maximum rate of change of steering angle per second
         self.acceleration = 0 # Acceleration
-        self.closest_point_idx = 0
-        self.distance_to_central=0
+        self.closest_point_idx = 0#read-only
+        self.distance_to_central=0#read-only
         self.speed=0#read-only
+        self.lastest_point_idx=0#read-only
 
     def update_position(self, delta_time, acceleration=0.0, steering_angle=0.0, road_width=10.0):
         old_position = self.position.copy()
@@ -166,6 +167,7 @@ class RealisticCar2D:
         self.speed = np.linalg.norm(self.velocity)
         if self.speed > self.max_speed:
             self.velocity = (self.velocity / self.speed) * self.max_speed
+        self.lastest_point_idx=self.closest_point_idx
         self.closest_point_idx ,self.distance_to_central= compute_closest_point_idx(self, track_2D)
 
 
