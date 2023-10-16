@@ -180,7 +180,14 @@ class RealisticCar2D:
         if self.speed > self.max_speed:
             self.velocity = (self.velocity / self.speed) * self.max_speed
         self.lastest_point_idx=self.closest_point_idx
-        self.closest_point_idx ,self.distance_to_central= compute_closest_point_idx(self, track_2D)
+        self.closest_point_idx,_ = compute_closest_point_idx(self, track_2D)
+        self.distance_to_central= self.compute_future_point_idx( track_2D)
+
+    def compute_future_point_idx(car, track_2D):
+        #cur_point=track_2D[car.closest_point_idx]
+        next_point=track_2D[min(car.closest_point_idx+1,len(track_2D))]
+        dir=next_point-car.position
+        return np.linalg.norm(dir)
 
 
 def check_collision_with_track(car_position, track_2D, road_width):

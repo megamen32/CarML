@@ -1,5 +1,6 @@
 import math
 import os.path
+import traceback
 
 import numpy as np
 import torch
@@ -11,31 +12,49 @@ from gymnn.racingenv import RacingEnv
 
 
 class Actor(nn.Module):
-    def __init__(self, input_dim, output_dim):
+    def __init__(self, input_dim, output_dim, num_hidden_layers=1, hidden_size=128):
         super(Actor, self).__init__()
-        self.fc = nn.Sequential(
-            nn.Linear(input_dim, 64), nn.ReLU(),
-            nn.Linear(64, 64), nn.ReLU(),
-            nn.Linear(64, output_dim),nn.Tanh()
-        )
+
+        # Initial layer
+        layers = [nn.Linear(input_dim, hidden_size), nn.ReLU()]
+
+        # Add hidden layers
+        for _ in range(num_hidden_layers - 1):
+            layers.append(nn.Linear(hidden_size, hidden_size))
+            layers.append(nn.ReLU())
+
+        # Final layer
+        layers.append(nn.Linear(hidden_size, output_dim))
+        layers.append(nn.Tanh())
+
+        self.fc = nn.Sequential(*layers)
 
     def forward(self, x):
         return self.fc(x)
 
 
 class Critic(nn.Module):
-    def __init__(self, input_dim, action_dim):
+    def __init__(self, input_dim, action_dim, num_hidden_layers=1, hidden_size=128):
         super(Critic, self).__init__()
-        self.fc = nn.Sequential(
-            nn.Linear(input_dim + action_dim, 64),nn.ReLU(),
-            nn.Linear(64, 64),nn.ReLU(),
-            nn.Linear(64, 1)
-        )
+
+        # Initial layer
+        layers = [nn.Linear(input_dim + action_dim, hidden_size), nn.ReLU()]
+
+        # Add hidden layers
+        for _ in range(num_hidden_layers - 1):
+            layers.append(nn.Linear(hidden_size, hidden_size))
+            layers.append(nn.ReLU())
+
+        # Final layer
+        layers.append(nn.Linear(hidden_size, 1))
+
+        self.fc = nn.Sequential(*layers)
 
     def forward(self, state, action):
         return self.fc(torch.cat([state, action], dim=1))
-model__pth = 'best_model3.pth'
-def save_model(actor_model, critic_model, params, reward, filename=model__pth):
+
+
+def save_model(actor_model, critic_model, params, reward, filename):
     """Saves the actor and critic models along with hyperparameters and max reward."""
     torch.save({
         'actor_state_dict': actor_model.state_dict(),
@@ -44,7 +63,7 @@ def save_model(actor_model, critic_model, params, reward, filename=model__pth):
         'max_reward': reward
     }, filename)
 
-def load_model(filename=model__pth):
+def load_model(filename):
     """Loads the actor and critic models, their hyperparameters, and the max reward."""
     checkpoint = torch.load(filename)
     state_dim = env.observation_space.shape[0]
@@ -59,7 +78,8 @@ def load_model(filename=model__pth):
     return loaded_actor, loaded_critic, checkpoint['hyperparameters'], checkpoint['max_reward']
 
 
-def train(env,actor,critic, num_episodes=1000, gamma=0.99, actor_lr=0.1, critic_lr=0.01, tau=0.90,noise_std=0.5,best_reward=float('-inf'),patience=20):
+def train(env, actor, critic, num_episodes=1000, gamma=0.99, actor_lr=0.1, critic_lr=0.01, tau=0.90, noise_std=0.5,
+          best_reward=float('-inf'), patience=20, model__pth='best_cur_model.pth'):
 
     target_actor = Actor(state_dim, action_dim).to(device)
     target_critic = Critic(state_dim, action_dim).to(device)
@@ -155,7 +175,7 @@ def train(env,actor,critic, num_episodes=1000, gamma=0.99, actor_lr=0.1, critic_
         if total_reward > best_reward:
             best_reward = total_reward
             best_params = params
-            save_model(actor, critic, best_params,best_reward)
+            save_model(actor, critic, best_params,best_reward,model__pth)
     return actor,critic
 
 
@@ -164,15 +184,16 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 from itertools import product
 
 # Define hyperparameters to search over
-num_episodes_options = [100,200,500, 1000]
-gamma_options = [0.98, 0.99]
+hidden_layers_variants=[0,1,2,3,4]
+num_episodes_options = [200,1000]
+gamma_options = [0.30,0.50, 0.98]
 actor_lr_options = [0.1, 0.01]
-critic_lr_options = [0.01, 0.001]
-tau_options = [0.995, 0.90,0.95]
-noise_std_options = [2,1, 0.2]
+critic_lr_options = [0.1,0.01]
+tau_options = [0.999,0.995]
+noise_std_options = [10,5, 2]
 
 # Create a list of all combinations
-parameter_combinations = list(product(num_episodes_options, gamma_options, actor_lr_options, critic_lr_options, tau_options, noise_std_options))
+parameter_combinations = list(product(hidden_layers_variants,num_episodes_options, gamma_options, actor_lr_options, critic_lr_options, tau_options, noise_std_options))
 
 best_reward = float('-inf')
 env = RacingEnv()
@@ -180,24 +201,27 @@ env = RacingEnv()
 state_dim = env.observation_space.shape[0]
 action_dim = env.action_space.shape[0]
 
-if os.path.exists(model__pth):
-    actor,critic,_,best_reward=load_model()
-else:
-    actor = Actor(state_dim, action_dim)
-    critic = Critic(state_dim, action_dim)
-actor=actor.to(device)
-critic=critic.to(device)
-best_params = None
 
+best_params = None
+best_reward_params=-math.inf
 for params in parameter_combinations:
-    print(f"Training with parameters: num_episodes={params[0]}, gamma={params[1]}, actor_lr={params[2]}, critic_lr={params[3]}, tau={params[4]}, noise_std={params[5]}")
+    model__pth = f'best_model_{params[0]}_128.pth'
+    if os.path.exists(model__pth) and False:
+        actor,critic,_,best_reward=load_model(model__pth)
+    else:
+        actor = Actor(state_dim, action_dim,params[0])
+        critic = Critic(state_dim, action_dim,params[0])
+    actor=actor.to(device)
+    critic=critic.to(device)
+    print(f"Training with parameters: layers={params[0]} num_episodes={params[1]}, gamma={params[2]}, actor_lr={params[3]}, critic_lr={params[4]}, tau={params[5]}, noise_std={params[6]}")
     env = RacingEnv()
     # Train the model with the current set of parameters
-    actor,critic = train(env,actor,critic, num_episodes=params[0], gamma=params[1], actor_lr=params[2], critic_lr=params[3], tau=params[4], noise_std=params[5],best_reward=best_reward)
+    actor,critic = train(env,actor,critic, num_episodes=params[1], gamma=params[2], actor_lr=params[3], critic_lr=params[4], tau=params[5], noise_std=params[6],best_reward=best_reward,model__pth=model__pth)
     env.close()
     # Evaluate the model (This can be your own evaluation metric, here I just use the total reward from the last episode as an example)
     total_reward = 0
-    for _ in range(10):  # Run for 10 episodes to get an average performance
+    testing_episodes = 10
+    for _ in range(testing_episodes):  # Run for 10 episodes to get an average performance
         state = env.reset()
         done = False
         while not done:
@@ -207,12 +231,17 @@ for params in parameter_combinations:
             state, reward, done, _ = env.step(action)
             total_reward += reward
 
-    average_reward = total_reward / 10
-    print(f"Average reward: {average_reward}")
+    average_reward = total_reward / testing_episodes
+    print(f"Average reward: {average_reward} on {params}")
 
-    if average_reward > best_reward:
-        best_reward = average_reward
-        best_params = params
+    try:
+        if average_reward > best_reward_params:
+            print(f"Best parameters: layers={best_params[0]} num_episodes={best_params[1]}, gamma={best_params[2]}, actor_lr={best_params[3]}, critic_lr={best_params[4]}, tau={best_params[5]}, noise_std={best_params[6]} with reward: {best_reward}")
+            best_reward = average_reward
+            best_params = params
+            save_model(actor,critic,params,average_reward,'final_'+model__pth)
+    except:
+        traceback.print_exc()
 
 
-print(f"Best parameters: num_episodes={best_params[0]}, gamma={best_params[1]}, actor_lr={best_params[2]}, critic_lr={best_params[3]}, tau={best_params[4]}, noise_std={best_params[5]} with reward: {best_reward}")
+print(f"Best parameters: layers={best_params[0]} num_episodes={best_params[1]}, gamma={best_params[2]}, actor_lr={best_params[3]}, critic_lr={best_params[4]}, tau={best_params[5]}, noise_std={best_params[6]} with reward: {best_reward}")
