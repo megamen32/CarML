@@ -14,15 +14,17 @@ from main import RealisticCar2D, place_car_on_track, check_collision_with_track,
 from replayplayer import init_screen, draw_track, draw_car
 
 
-def get_state(car, track_2D):
+def get_state(car, track_2D,road_width):
     fclosest_point = track_2D[min((car.closest_point_idx+5),len(track_2D)-1)]  # Assuming you have this function implemented
-    distance =car.distance_to_central  # Assuming you have this function implemented
+    fdistance =car.distance_to_central  # Assuming you have this function implemented
+    distance =car.distance_to_curr  # Assuming you have this function implemented
     fpoint_x,fpoint_y=fclosest_point
     point_x,point_y= track_2D[(car.closest_point_idx)]
     accelration=car.acceleration
     speed_x,spped_y = car.velocity
     posx,posy=car.position
-    return torch.FloatTensor([distance,posx,posy,fpoint_x,fpoint_y,accelration ,speed_x,spped_y,point_x,point_y,car.current_steering_angle])
+    angle=car.angle
+    return torch.FloatTensor([road_width,distance,angle,fdistance,posx,posy,fpoint_x,fpoint_y,accelration ,speed_x,spped_y,point_x,point_y,car.current_steering_angle])
 
 
 class RacingEnv(gym.Env):
@@ -32,7 +34,7 @@ class RacingEnv(gym.Env):
             collision_penalty= -10000.0
             return collision_penalty,False
 
-        distance=(self.segments_length-car.distance_to_central)/self.segments_length
+        distance=-1
 
         backward_penalty = 0
         if car.closest_point_idx < car.lastest_point_idx:
@@ -61,7 +63,7 @@ class RacingEnv(gym.Env):
         #center_reward = (self.road_width - car.distance_to_central) / self.road_width
         reward = distance * 2 + finish_reward + backward_penalty + collision_penalty + alignment
         return reward,finish_reward>0
-    def __init__(self, road_width=100, delta_time=1,max_time=100000):
+    def __init__(self, road_width=100, delta_time=1,max_time=1000):
         super(RacingEnv, self).__init__()
         self.road_width =random.uniform(0.5,1.5)* road_width
         self.max_time = max_time
@@ -71,8 +73,12 @@ class RacingEnv(gym.Env):
         self.action_space = spaces.Box(low=np.array([-1.0, -1.0]), high=np.array([1.0, 1.0]), dtype=np.float32)
 
         # State space
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(11,), dtype=np.float32)
+        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(14,), dtype=np.float32)
         pygame.init()
+        pygame.font.init()
+        self.font = pygame.font.SysFont(None, 36)  # Use default font, size 36
+        self.cumulative_reward = 0  # To store cumulative rewards
+
         self.screen, self.manager = init_screen()
 
         self.reset()
@@ -88,8 +94,9 @@ class RacingEnv(gym.Env):
         place_car_on_track(self.car, self.track_2D, 0)
         self.time=0
         self._step=0
-
-        state = get_state(self.car, self.track_2D)  # Assuming single car for simplicity
+        self.reward=0
+        self.cumulative_reward=0
+        state = get_state(self.car, self.track_2D,self.road_width)  # Assuming single car for simplicity
         return state
 
 
@@ -99,14 +106,14 @@ class RacingEnv(gym.Env):
         self.car.update_position(track_2D=self.track_2D,acceleration=action[0], steering_angle=action[1], road_width=self.road_width,
                                  delta_time=self.delta_time)
 
-        next_state = get_state(self.car, self.track_2D)
+        next_state = get_state(self.car, self.track_2D,self.road_width)
         collision, _ = check_collision_with_track(self.car.position, self.track_2D, road_width=self.road_width)
 
-        reward, finish = self.advanced_reward_function(self.car, collision)
-
+        self.reward, finish = self.advanced_reward_function(self.car, collision)
+        self.cumulative_reward += self.reward
         done = collision or self.max_time <self.time or finish
 
-        return next_state, reward, done, {}
+        return next_state, self.reward, done, {}
 
     def render(self, mode='human'):
         # Clear the screen
@@ -114,8 +121,16 @@ class RacingEnv(gym.Env):
 
         # Draw the track
         draw_track(self.screen, self.track_2D, self.road_width)
+        speed_text = self.font.render(f"Speed: {self.car.speed:.2f} dist_central={self.car.distance_to_central:.2f}", True, (255, 255, 255))
+        current_reward_text = self.font.render(f"Current Reward: {self.reward:.2f}", True, (255, 255, 255))
+        cumulative_reward_text = self.font.render(f"Cumulative Reward: {self.cumulative_reward:.2f}", True, (255, 255, 255))
 
-        # Draw the car
+        # Draw these texts on the screen
+        self.screen.blit(speed_text, (10, 10))  # Top left corner
+        self.screen.blit(current_reward_text, (10, 50))  # Below the speed text
+        self.screen.blit(cumulative_reward_text, (10, 90))  # Below the current reward text
+
+    # Draw the car
         draw_car(self.car, self.screen, self.track_2D)
 
         # Refresh the display

@@ -144,6 +144,8 @@ class RealisticCar2D:
         self.distance_to_central=0#read-only
         self.speed=0#read-only
         self.lastest_point_idx=0#read-only
+        self.distance_to_curr=0
+        self.angle=0
 
     def update_position(self, delta_time,track_2D, acceleration=0.0, steering_angle=0.0, road_width=10.0):
         old_position = self.position.copy()
@@ -180,14 +182,40 @@ class RealisticCar2D:
         if self.speed > self.max_speed:
             self.velocity = (self.velocity / self.speed) * self.max_speed
         self.lastest_point_idx=self.closest_point_idx
-        self.closest_point_idx,_ = compute_closest_point_idx(self, track_2D)
+        self.closest_point_idx,self.distance_to_curr = compute_closest_point_idx(self, track_2D)
         self.distance_to_central= self.compute_future_point_idx( track_2D)
+        if self.closest_point_idx + 1 < len(track_2D):
+            # Direction of the track segment
+            track_dir = np.array(track_2D[self.closest_point_idx + 1]) - np.array(track_2D[self.closest_point_idx])
+            track_dir /= np.linalg.norm(track_dir)  # Normalize the track direction
+
+            # Car's direction
+            car_dir = self.velocity / np.linalg.norm(self.velocity) if np.linalg.norm(self.velocity) != 0 else np.array([0.0, 1.0])
+
+            # Compute the dot product between the car direction and track direction
+            dot_product = np.dot(track_dir, car_dir)
+
+            # Compute the angle using the arccosine function
+            self.angle = np.arccos(np.clip(dot_product, -1.0, 1.0))
 
     def compute_future_point_idx(car, track_2D):
-        #cur_point=track_2D[car.closest_point_idx]
-        next_point=track_2D[min(car.closest_point_idx+1,len(track_2D))]
-        dir=next_point-car.position
-        return np.linalg.norm(dir)
+        if car.closest_point_idx + 1 >= len(track_2D):
+            return 0.0  # If it's the last point, return distance 0
+
+        p1 = track_2D[car.closest_point_idx]
+        p2 = track_2D[car.closest_point_idx + 1]
+        p = car.position
+
+        if np.array_equal(p1, p2):
+            return np.linalg.norm(p - p1)
+
+        # Calculate the line segment distance
+        num = abs((p2[1] - p1[1]) * p[0] + (p1[0] - p2[0]) * p[1] + (p2[0] * p1[1] - p1[0] * p2[1]))
+        den = np.linalg.norm(np.array(p2) - np.array(p1))
+        distance = num / den
+
+        return distance
+
 
 
 def check_collision_with_track(car_position, track_2D, road_width):
