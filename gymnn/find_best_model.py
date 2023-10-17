@@ -1,3 +1,5 @@
+import traceback
+
 import torch
 import os
 
@@ -16,7 +18,7 @@ def find_top_n_models(directory=".", n=10):
 
     # Iterate over all files in the directory
     for filename in os.listdir(directory):
-        if filename.endswith(".pth") and "best_cur_model" in filename:
+        if filename.endswith(".pth") and "cur_model" in filename:
             try:
                 reward = load_max_reward_from_file(filename)
                 rewards.append((filename, reward))
@@ -51,6 +53,7 @@ def test_model(filepath, env, testing_episodes=10):
                 state_tensor = torch.FloatTensor(state).to(device)
                 action = actor(state_tensor).cpu().numpy()
             state, reward, done, _ = env.step(action)
+            env.render(mode='rgb')
             total_reward += reward
 
     average_reward = total_reward / testing_episodes
@@ -60,9 +63,13 @@ def test_model(filepath, env, testing_episodes=10):
 def test_top_models(filepaths, env):
     results = []
 
-    for filepath in filepaths:
-        average_reward = test_model(filepath[0], env)
-        results.append((average_reward, filepath[0]))
+    for i,filepath in enumerate(filepaths):
+        try:
+            average_reward = test_model(filepath[0], env)
+            print(i,'test complete for',filepath[0],' reward: ',average_reward)
+            results.append((average_reward, filepath[0]))
+        except:
+            traceback.print_exc()
 
     results.sort(key=lambda x: x[0], reverse=True)
 
@@ -72,10 +79,10 @@ def test_top_models(filepaths, env):
 
 
 if __name__ == '__main__':
-    top_models = find_top_n_models()
+    top_models = find_top_n_models(n=100)
     for idx, (filename, reward) in enumerate(top_models, start=1):
         print(f"{idx}. Model: {filename} with a reward of {reward}")
-    env = RacingEnv()
+    env = RacingEnv(render=True,max_time=100)
 
     test_results = test_top_models(top_models, env)
 

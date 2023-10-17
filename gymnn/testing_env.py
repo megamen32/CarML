@@ -117,6 +117,9 @@ def train(env, actor, critic, params,num_episodes=1000, gamma=0.99, actor_lr=0.1
 
 
             next_state, reward, done, _ = env.step(action)
+            total_reward += reward
+            if env.finish:
+                print(f'finished with noise={noise_cur} in {env.time} on {params}')
             if total_reward > last_best_reward:
                 last_best_reward = total_reward
                 no_improve_counter = 0
@@ -128,9 +131,9 @@ def train(env, actor, critic, params,num_episodes=1000, gamma=0.99, actor_lr=0.1
                 done=True
             replay_buffer.append((state, action, reward, next_state, done))
 
-            total_reward += reward
+
             state = next_state
-            env.render(mode='train')
+            env.render(mode='train',noise_std=noise_cur)
             no_training_frame+=1
 
             if len(replay_buffer) > 32 and no_training_frame>frames_to_train:
@@ -172,7 +175,7 @@ def train(env, actor, critic, params,num_episodes=1000, gamma=0.99, actor_lr=0.1
         print(f"Episode {episode + 1}: Total Reward: {total_reward}")
         last_100_rewards.append(total_reward)
         average_reward=  np.mean(last_100_rewards)
-        if total_reward > best_reward and noise_cur<0.5:
+        if total_reward > best_reward and noise_cur<0.2:
             best_reward = total_reward
             best_params = params
             save_model(actor, critic, best_params,best_reward,model__pth)
@@ -190,17 +193,13 @@ gamma_options = [0.30]
 actor_lr_options = [0.1,0.01]
 critic_lr_options = [0.1,0.01]
 tau_options = [0.998]
-noise_std_options = [ 2,0.5]
+noise_std_options = [ 1,0.5]
 replay_buffer_length=[3000,6000,12000]
 
 # Create a list of all combinations
 parameter_combinations = list(product(hidden_layers_variants,num_episodes_options, gamma_options, actor_lr_options, critic_lr_options, tau_options, noise_std_options,replay_buffer_length))
 
-best_reward = float('-inf')
-env = RacingEnv()
 
-state_dim = env.observation_space.shape[0]
-action_dim = env.action_space.shape[0]
 
 
 
@@ -301,4 +300,9 @@ def train_multiple():
 
 
 if __name__=='__main__':
+    best_reward = float('-inf')
+    env = RacingEnv()
+
+    state_dim = env.observation_space.shape[0]
+    action_dim = env.action_space.shape[0]
     train_multiple()

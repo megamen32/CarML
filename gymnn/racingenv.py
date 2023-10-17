@@ -46,26 +46,17 @@ class RacingEnv(gym.Env):
         finish_reward = 0
         total_segments =self.total_segments
         if car.closest_point_idx == total_segments - 2:
-            finish_reward = 5000000000 / self.time
-            print('finish!', finish_reward, self.time)
+            finish_reward = 500000 / self.time
             return finish_reward,True
-        segment_dir = np.array(self.track_2D[min(car.closest_point_idx + 1,total_segments-1)]) - np.array(self.track_2D[car.closest_point_idx])
-        segment_dir = segment_dir / np.linalg.norm(segment_dir)  # Normalize to get a unit vector
 
-
-        # Use car's velocity to get the direction of movement
-        car_dir = np.array(car.velocity)  # Assuming car.velocity is a 2D vector
-        #car_dir = car_dir   # Normalize to get a unit vector
-
-        # Calculate the alignment of the car's velocity with the segment's direction
-        alignment = np.dot(car_dir, segment_dir)
 
         #center_reward = (self.road_width - car.distance_to_central) / self.road_width
-        reward = distance * 2 + finish_reward + backward_penalty + collision_penalty + alignment
+        reward = distance * 2 + finish_reward + backward_penalty + collision_penalty + car.alignment*car.speed
         return reward,finish_reward>0
-    def __init__(self, road_width=100, delta_time=1,max_time=1000):
+    def __init__(self, road_width=100, delta_time=1,max_time=100,render=True):
         super(RacingEnv, self).__init__()
-        self.road_width =random.uniform(0.5,1.5)* road_width
+        self._road_width=road_width
+
         self.max_time = max_time
         self.time=0
         self.delta_time=delta_time
@@ -74,18 +65,20 @@ class RacingEnv(gym.Env):
 
         # State space
         self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(14,), dtype=np.float32)
-        pygame.init()
-        pygame.font.init()
-        self.font = pygame.font.SysFont(None, 36)  # Use default font, size 36
         self.cumulative_reward = 0  # To store cumulative rewards
-
-        self.screen, self.manager = init_screen()
+        self._render=render
+        if render:
+            pygame.init()
+            pygame.font.init()
+            self.font = pygame.font.SysFont(None, 36)  # Use default font, size 36
+            self.screen, self.manager = init_screen()
 
         self.reset()
 
     def reset(self, seed=0, options=None):
         if options is None:
             options = {}
+        self.road_width =random.uniform(0.2,1.5)* self._road_width
         self.segments_length = self.road_width // 10
         self.track_2D=main.make_strange_trace(random.random() > 0.5, self.segments_length)
         self.total_segments=len(self.track_2D)
@@ -96,6 +89,7 @@ class RacingEnv(gym.Env):
         self._step=0
         self.reward=0
         self.cumulative_reward=0
+        self.finish=False
         state = get_state(self.car, self.track_2D,self.road_width)  # Assuming single car for simplicity
         return state
 
@@ -109,13 +103,13 @@ class RacingEnv(gym.Env):
         next_state = get_state(self.car, self.track_2D,self.road_width)
         collision, _ = check_collision_with_track(self.car.position, self.track_2D, road_width=self.road_width)
 
-        self.reward, finish = self.advanced_reward_function(self.car, collision)
+        self.reward, self.finish = self.advanced_reward_function(self.car, collision)
         self.cumulative_reward += self.reward
-        done = collision or self.max_time <self.time or finish
+        done = collision or self.max_time <self.time or self.finish
 
         return next_state, self.reward, done, {}
 
-    def render(self, mode='human'):
+    def render(self, mode='human',noise_std=None):
         # Clear the screen
         self.screen.fill((0, 0, 0))
 
@@ -124,6 +118,9 @@ class RacingEnv(gym.Env):
         speed_text = self.font.render(f"Speed: {self.car.speed:.2f} dist_central={self.car.distance_to_central:.2f}", True, (255, 255, 255))
         current_reward_text = self.font.render(f"Current Reward: {self.reward:.2f}", True, (255, 255, 255))
         cumulative_reward_text = self.font.render(f"Cumulative Reward: {self.cumulative_reward:.2f}", True, (255, 255, 255))
+        if noise_std:
+                noise = self.font.render(f"noise: {noise_std:.2f}", True, (255, 255, 255))
+                self.screen.blit(noise, (10, 130))  # Below the cumulative_reward_text
 
         # Draw these texts on the screen
         self.screen.blit(speed_text, (10, 10))  # Top left corner

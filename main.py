@@ -140,12 +140,15 @@ class RealisticCar2D:
         self.max_steering_rate = max_steering_rate # Maximum rate of change of steering angle per second
         self.max_acceleration_rate = 0.1  # Maximum rate of change of steering angle per second
         self.acceleration = 0 # Acceleration
+        self.orientation = np.array([1.0, 0.0])
         self.closest_point_idx = 0#read-only
         self.distance_to_central=0#read-only
         self.speed=0#read-only
         self.lastest_point_idx=0#read-only
-        self.distance_to_curr=0
-        self.angle=0
+        self.distance_to_curr=0#read-only
+        self.angle=0#read-only
+        self.alignment=0#read-only
+
 
     def update_position(self, delta_time,track_2D, acceleration=0.0, steering_angle=0.0, road_width=10.0):
         old_position = self.position.copy()
@@ -158,10 +161,9 @@ class RealisticCar2D:
         self.acceleration = min(max(-self.max_acceleration, self.acceleration), self.max_acceleration)
 
         # 3. Aerodynamic Drag
-        speed = np.linalg.norm(self.velocity)
-        direction = self.velocity / speed if speed != 0 else np.array([0.0, 1.0])
+        direction = self.orientation
         acceleration_vector = self.acceleration * direction
-        drag_force = -self.drag_coefficient * self.velocity * speed
+        drag_force = -self.drag_coefficient * self.velocity * self.speed
 
         # 4. Steering and Turning Radius
         steering_diff = steering_angle - self.current_steering_angle
@@ -171,6 +173,7 @@ class RealisticCar2D:
         rotation_matrix = np.array([[math.cos(self.current_steering_angle), -math.sin(self.current_steering_angle)],
                                     [math.sin(self.current_steering_angle), math.cos(self.current_steering_angle)]])
 
+        self.orientation = np.dot(rotation_matrix, self.orientation)
         self.velocity = np.dot(rotation_matrix, self.velocity)
 
         # 5. Update Velocity and Position
@@ -190,13 +193,13 @@ class RealisticCar2D:
             track_dir /= np.linalg.norm(track_dir)  # Normalize the track direction
 
             # Car's direction
-            car_dir = self.velocity / np.linalg.norm(self.velocity) if np.linalg.norm(self.velocity) != 0 else np.array([0.0, 1.0])
+            car_dir = self.orientation
 
             # Compute the dot product between the car direction and track direction
-            dot_product = np.dot(track_dir, car_dir)
+            self.alignment = np.dot(track_dir, car_dir)
 
             # Compute the angle using the arccosine function
-            self.angle = np.arccos(np.clip(dot_product, -1.0, 1.0))
+            self.angle = np.arccos(np.clip(self.alignment, -1.0, 1.0))
 
     def compute_future_point_idx(car, track_2D):
         if car.closest_point_idx + 1 >= len(track_2D):
@@ -264,6 +267,7 @@ def place_car_on_track(car, track_2D, start_index):
     direction_vector /= np.linalg.norm(direction_vector)
 
     # Set the car's velocity to make it head towards the centerline
+    car.orientation=direction_vector
     car.velocity = direction_vector
     car.acceleration=0.51
     car.closest_point_idx=start_index
