@@ -14,7 +14,7 @@ from main import RealisticCar2D, place_car_on_track, check_collision_with_track,
 from replayplayer import init_screen, draw_track, draw_car
 
 
-def get_state(car, track_2D, road_width):
+def get_state(car, track_2D):
     # Lateral velocity (velocity component perpendicular to the car's orientation)
     lateral_velocity = np.dot(car.velocity, np.array([-car.orientation[1], car.orientation[0]]))
 
@@ -27,7 +27,6 @@ def get_state(car, track_2D, road_width):
     next_curve_distance = np.linalg.norm(np.array(track_2D[max_idx]) - car.position)
 
     return torch.FloatTensor([
-        road_width,
         car.speed,
         car.acceleration,
         car.turning_rate,
@@ -82,7 +81,7 @@ class RacingEnv(gym.Env):
         self.action_space = spaces.Box(low=np.array([-1.0, -1.0]), high=np.array([1.0, 1.0]), dtype=np.float32)
 
         # State space
-        self.observation_space = spaces.Box(low=-np.inf, high=np.inf, shape=(9,), dtype=np.float32)
+
         self.cumulative_reward = 0  # To store cumulative rewards
         self._render=render
         if render:
@@ -91,7 +90,8 @@ class RacingEnv(gym.Env):
             self.font = pygame.font.SysFont(None, 36)  # Use default font, size 36
             self.screen, self.manager = init_screen()
 
-        self.reset()
+        state=self.reset()
+        self.observation_space = spaces.Box(low=-1, high=1, shape=(state.shape[0],), dtype=np.float32)
 
     def reset(self, seed=0, options=None):
         if options is None:
@@ -110,7 +110,7 @@ class RacingEnv(gym.Env):
         self.no_improve_counter=0
         self.cumulative_reward=0
         self.finish=False
-        state = get_state(self.car, self.track_2D,self.road_width)  # Assuming single car for simplicity
+        state = get_state(self.car, self.track_2D)  # Assuming single car for simplicity
         return state
 
 
@@ -120,7 +120,7 @@ class RacingEnv(gym.Env):
         self.car.update_position(track_2D=self.track_2D,acceleration=action[0], steering_angle=action[1], road_width=self.road_width,
                                  delta_time=self.delta_time)
 
-        next_state = get_state(self.car, self.track_2D,self.road_width)
+        next_state = get_state(self.car, self.track_2D)
         collision, _ = check_collision_with_track(self.car.position, self.track_2D, road_width=self.road_width)
 
         self.reward, self.finish = self.advanced_reward_function(self.car, collision)

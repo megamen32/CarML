@@ -9,6 +9,8 @@ import multiprocessing
 
 from gymnn.racingenv import RacingEnv
 
+testing_times = 1
+
 GENOME_PKL = 'best_neat_genome2.pkl'
 
 # Define the evaluation function for the NEAT algorithm
@@ -20,7 +22,7 @@ def eval_genomes(genomes, config):
     for genome_id, genome in genomes:
         net = neat.nn.FeedForwardNetwork.create(genome, config)
         total_reward = 0
-        for _ in range(2):  # Run for 10 episodes to get an average performance
+        for _ in range(testing_times):  # Run for 10 episodes to get an average performance
             state = env.reset()
             done = False
             while not done:
@@ -30,12 +32,12 @@ def eval_genomes(genomes, config):
                 total_reward += reward
                 if render:
                     env.render(mode='train')
-        genome.fitness = total_reward / 2
+        genome.fitness = total_reward / testing_times
 def eval_genome(genome, config):
     env=RacingEnv(render=render)
     net = neat.nn.FeedForwardNetwork.create(genome, config)
     total_reward = 0
-    for _ in range(2):  # Run for 10 episodes to get an average performance
+    for _ in range(testing_times):  # Run for 10 episodes to get an average performance
         state = env.reset()
         done = False
         while not done:
@@ -44,7 +46,7 @@ def eval_genome(genome, config):
             total_reward += reward
             if render:
                 env.render(mode='train')
-    return total_reward / 2
+    return total_reward / testing_times
 
 def test_winner(winner_genome, config):
     env=RacingEnv(render=render)

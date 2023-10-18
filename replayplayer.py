@@ -37,7 +37,7 @@ def get_next_position():
             with open(POSITION_FILE, 'r') as f:
                 x, y = map(int, f.read().split(','))
         except:
-            traceback.print_exc()
+            pass
 
         new_x = x + WINDOW_HEIGHT  # Здесь 800 - это ширина окна приложения
         new_y = y

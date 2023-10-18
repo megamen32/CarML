@@ -16,12 +16,12 @@ class Actor(nn.Module):
         super(Actor, self).__init__()
 
         # Initial layer
-        layers = [nn.Linear(input_dim, hidden_size), nn.Sigmoid()]
+        layers = [nn.Linear(input_dim, hidden_size), nn.Tanh()]
 
         # Add hidden layers
         for _ in range(num_hidden_layers - 1):
             layers.append(nn.Linear(hidden_size, hidden_size))
-            layers.append(nn.Sigmoid())
+            layers.append(nn.Tanh())
 
         # Final layer
         layers.append(nn.Linear(hidden_size, output_dim))
@@ -38,12 +38,12 @@ class Critic(nn.Module):
         super(Critic, self).__init__()
 
         # Initial layer
-        layers = [nn.Linear(input_dim + action_dim, hidden_size), nn.Sigmoid()]
+        layers = [nn.Linear(input_dim + action_dim, hidden_size), nn.Tanh()]
 
         # Add hidden layers
         for _ in range(num_hidden_layers - 1):
             layers.append(nn.Linear(hidden_size, hidden_size))
-            layers.append(nn.Sigmoid())
+            layers.append(nn.Tanh())
 
         # Final layer
         layers.append(nn.Linear(hidden_size, 1))
@@ -194,10 +194,10 @@ from itertools import product
 
 # Define hyperparameters to search over
 hidden_layers_variants=[5]
-num_episodes_options = [100000]
+num_episodes_options = [10000]
 gamma_options = [0.50]
-actor_lr_options = [0.01]
-critic_lr_options = [0.01]
+actor_lr_options = [0.1]
+critic_lr_options = [0.1]
 tau_options = [0.999]
 noise_std_options = [ 0.5]
 replay_buffer_length=[12000]

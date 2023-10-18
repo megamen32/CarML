@@ -156,8 +156,7 @@ class RealisticCar2D:
         acc_diff = np.clip(acc_diff, -self.max_acceleration * delta_time, self.max_acceleration * delta_time)
         self.acceleration += acc_diff
 
-        # Aerodynamic Drag
-        drag_force = -self.drag_coefficient * self.velocity * self.speed
+
         acceleration_vector = self.acceleration * self.orientation
 
         # Update steering angle
@@ -169,13 +168,17 @@ class RealisticCar2D:
         rotation_matrix = np.array([[math.cos(self.current_steering_angle), -math.sin(self.current_steering_angle)],
                                     [math.sin(self.current_steering_angle), math.cos(self.current_steering_angle)]])
         self.orientation = np.dot(rotation_matrix, self.orientation)
-        self.velocity = np.dot(rotation_matrix, self.velocity) + (acceleration_vector + drag_force / self.mass) * delta_time
+        self.velocity = np.dot(rotation_matrix, self.velocity) + (acceleration_vector / self.mass) * delta_time
 
         # Update position
         self.position += self.velocity * delta_time
 
         # Update speed and cache state
-        self.speed = np.linalg.norm(self.velocity)
+        self.speed = np.linalg.norm(self.velocity)/self.max_speed
+        if self.speed>1:
+            self.velocity=self.velocity/self.speed
+            self.speed = np.linalg.norm(self.velocity)/self.max_speed
+
         self.cache_state(track_2D,delta_time,road_width)
 
     def cache_state(self, track_2D,delta_time,road_width):
@@ -197,11 +200,6 @@ class RealisticCar2D:
             self.angle = np.arccos(np.clip(self.alignment, -1.0, 1.0))
 
 
-
-        # Compute the angle using the arccosine function
-        self.angle = np.arccos(np.clip(self.alignment, -1.0, 1.0))
-
-
     def compute_future_point_idx(car, track_2D,road_width):
         if car.closest_point_idx + 1 >= len(track_2D):
             return 0.0  # If it's the last point, return distance 0
@@ -218,7 +216,7 @@ class RealisticCar2D:
         den = np.linalg.norm(np.array(p2) - np.array(p1))
         distance = num / den
 
-        return distance/road_width
+        return distance*2/road_width
 
 
 
