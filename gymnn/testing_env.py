@@ -16,12 +16,12 @@ class Actor(nn.Module):
         super(Actor, self).__init__()
 
         # Initial layer
-        layers = [nn.Linear(input_dim, hidden_size), nn.ReLU()]
+        layers = [nn.Linear(input_dim, hidden_size), nn.Sigmoid()]
 
         # Add hidden layers
         for _ in range(num_hidden_layers - 1):
             layers.append(nn.Linear(hidden_size, hidden_size))
-            layers.append(nn.ReLU())
+            layers.append(nn.Sigmoid())
 
         # Final layer
         layers.append(nn.Linear(hidden_size, output_dim))
@@ -38,12 +38,12 @@ class Critic(nn.Module):
         super(Critic, self).__init__()
 
         # Initial layer
-        layers = [nn.Linear(input_dim + action_dim, hidden_size), nn.ReLU()]
+        layers = [nn.Linear(input_dim + action_dim, hidden_size), nn.Sigmoid()]
 
         # Add hidden layers
         for _ in range(num_hidden_layers - 1):
             layers.append(nn.Linear(hidden_size, hidden_size))
-            layers.append(nn.ReLU())
+            layers.append(nn.Sigmoid())
 
         # Final layer
         layers.append(nn.Linear(hidden_size, 1))
@@ -68,9 +68,10 @@ def load_model(filename):
     checkpoint = torch.load(filename)
     state_dim = env.observation_space.shape[0]
     action_dim = env.action_space.shape[0]
+    num_hidden_layers = checkpoint['hyperparameters'][0]
 
-    loaded_actor = Actor(state_dim, action_dim).to(device)
-    loaded_critic = Critic(state_dim, action_dim).to(device)
+    loaded_actor = Actor(state_dim, action_dim,num_hidden_layers).to(device)
+    loaded_critic = Critic(state_dim, action_dim,num_hidden_layers).to(device)
 
     loaded_actor.load_state_dict(checkpoint['actor_state_dict'])
     loaded_critic.load_state_dict(checkpoint['critic_state_dict'])
@@ -108,6 +109,11 @@ def train(env, actor, critic, params,num_episodes=1000, gamma=0.99, actor_lr=0.1
                 state_tensor = torch.FloatTensor(state).to(device)
 
                 noise_cur=max(0.001,noise_std*(num_episodes*0.8-episode)/(num_episodes*0.8))
+                learning_rate=max(0.00001,actor_lr*(num_episodes*0.8-episode)/(num_episodes*0.8))
+                for param_group in actor_optimizer.param_groups:
+                    param_group['lr'] = learning_rate
+                for param_group in critic_optimizer.param_groups:
+                    param_group['lr'] = learning_rate
                 if random.random()<noise_cur:
                     noise = np.random.normal(0, noise_cur, size=action_dim)
                     action = noise
@@ -133,7 +139,7 @@ def train(env, actor, critic, params,num_episodes=1000, gamma=0.99, actor_lr=0.1
 
 
             state = next_state
-            env.render(mode='train',noise_std=noise_cur)
+            #env.render(mode='train',noise_std=noise_cur)
             no_training_frame+=1
 
             if len(replay_buffer) > 32 and no_training_frame>frames_to_train:
@@ -175,7 +181,7 @@ def train(env, actor, critic, params,num_episodes=1000, gamma=0.99, actor_lr=0.1
         print(f"Episode {episode + 1}: Total Reward: {total_reward}")
         last_100_rewards.append(total_reward)
         average_reward=  np.mean(last_100_rewards)
-        if total_reward > best_reward and noise_cur<0.2:
+        if total_reward > best_reward and noise_cur<0.5:
             best_reward = total_reward
             best_params = params
             save_model(actor, critic, best_params,best_reward,model__pth)
@@ -187,14 +193,14 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 from itertools import product
 
 # Define hyperparameters to search over
-hidden_layers_variants=[2,3,4,5]
-num_episodes_options = [3000]
-gamma_options = [0.30]
-actor_lr_options = [0.1,0.01]
-critic_lr_options = [0.1,0.01]
-tau_options = [0.998]
-noise_std_options = [ 1,0.5]
-replay_buffer_length=[3000,6000,12000]
+hidden_layers_variants=[5]
+num_episodes_options = [100000]
+gamma_options = [0.50]
+actor_lr_options = [0.01]
+critic_lr_options = [0.01]
+tau_options = [0.999]
+noise_std_options = [ 0.5]
+replay_buffer_length=[12000]
 
 # Create a list of all combinations
 parameter_combinations = list(product(hidden_layers_variants,num_episodes_options, gamma_options, actor_lr_options, critic_lr_options, tau_options, noise_std_options,replay_buffer_length))
@@ -207,8 +213,8 @@ def train_single():
     best_params = None
     best_reward_params=best_reward=-math.inf
     for params in parameter_combinations:
-        model__pth = f'best_model_{params}_128.pth'
-        if os.path.exists(model__pth) and False:
+        model__pth = f'cur_model{params}.pth'
+        if os.path.exists(model__pth) and True:
             actor,critic,_,best_reward=load_model(model__pth)
         else:
             actor = Actor(state_dim, action_dim,params[0])
@@ -216,9 +222,9 @@ def train_single():
         actor=actor.to(device)
         critic=critic.to(device)
         print(f"Training with parameters: layers={params[0]} num_episodes={params[1]}, gamma={params[2]}, actor_lr={params[3]}, critic_lr={params[4]}, tau={params[5]}, noise_std={params[6]}")
-        env = RacingEnv()
+        env = RacingEnv(render=False)
         # Train the model with the current set of parameters
-        actor,critic = train(env,actor,critic,params=params, num_episodes=params[1], gamma=params[2], actor_lr=params[3], critic_lr=params[4], tau=params[5], noise_std=params[6],best_reward=best_reward,model__pth=model__pth)
+        actor,critic =train(env, actor, critic, params=params, num_episodes=params[1], gamma=params[2], actor_lr=params[3], critic_lr=params[4], tau=params[5], noise_std=params[6], model__pth=model__pth)
         env.close()
         # Evaluate the model (This can be your own evaluation metric, here I just use the total reward from the last episode as an example)
         total_reward = 0
@@ -298,11 +304,12 @@ def train_multiple():
 
     print(f"Best Average Reward: {best_result[0]} with parameters: {best_result[1]}")
 
+env = RacingEnv()
 
+state_dim = env.observation_space.shape[0]
+action_dim = env.action_space.shape[0]
+env.close()
 if __name__=='__main__':
     best_reward = float('-inf')
-    env = RacingEnv()
 
-    state_dim = env.observation_space.shape[0]
-    action_dim = env.action_space.shape[0]
-    train_multiple()
+    train_single()

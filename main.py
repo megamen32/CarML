@@ -2,6 +2,8 @@
 import random
 
 import numpy as np
+import torch
+from torch import Tensor
 
 # Improved Track Representation
 # Using a list of dictionaries to represent the track, encoding curvature and width
@@ -129,79 +131,78 @@ import math
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=1,drag_coefficient=0,max_steering_rate=0.01):
-        self.position = position  # Position vector [x, y]
-        self.velocity = velocity  # Velocity vector [vx, vy]
-        self.mass = mass  # Mass of the car
-        self.max_speed = max_speed  # Maximum speed
-        self.max_acceleration = max_acceleration # Maximum acceleration
-        self.drag_coefficient = drag_coefficient  # Aerodynamic drag coefficient
-        self.current_steering_angle = 0.0  # New attribute
-        self.max_steering_rate = max_steering_rate # Maximum rate of change of steering angle per second
-        self.max_acceleration_rate = 0.1  # Maximum rate of change of steering angle per second
-        self.acceleration = 0 # Acceleration
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=1, drag_coefficient=0, max_steering_rate=0.05):
+        self.position = position
+        self.velocity = velocity
         self.orientation = np.array([1.0, 0.0])
-        self.closest_point_idx = 0#read-only
-        self.distance_to_central=0#read-only
-        self.speed=0#read-only
-        self.lastest_point_idx=0#read-only
-        self.distance_to_curr=0#read-only
-        self.angle=0#read-only
-        self.alignment=0#read-only
+        self.turning_rate = 0.0
+        self.mass = mass
+        self.max_speed = max_speed
+        self.max_acceleration = max_acceleration
+        self.drag_coefficient = drag_coefficient
+        self.current_steering_angle = 0.0
+        self.max_steering_rate = max_steering_rate
+        self.acceleration = 0
+        self.closest_point_idx = 0
+        self.speed = np.linalg.norm(self.velocity)
+        self.previous_angle = np.arctan2(self.orientation[1], self.orientation[0])
+        self.distance_to_central=0
+        self.angle=0
+        self.lastest_point_idx=0
 
-
-    def update_position(self, delta_time,track_2D, acceleration=0.0, steering_angle=0.0, road_width=10.0):
-        old_position = self.position.copy()
-        # 1. Tire Friction and Acceleration
-
-        # 2. Mass and Inertia
+    def update_position(self, delta_time, track_2D,road_width, acceleration=0.0, steering_angle=0.0):
+        # Update acceleration
         acc_diff = acceleration - self.acceleration
-        acc_diff = np.clip(acc_diff, -self.max_acceleration_rate * delta_time, self.max_acceleration_rate * delta_time)
+        acc_diff = np.clip(acc_diff, -self.max_acceleration * delta_time, self.max_acceleration * delta_time)
         self.acceleration += acc_diff
-        self.acceleration = min(max(-self.max_acceleration, self.acceleration), self.max_acceleration)
 
-        # 3. Aerodynamic Drag
-        direction = self.orientation
-        acceleration_vector = self.acceleration * direction
+        # Aerodynamic Drag
         drag_force = -self.drag_coefficient * self.velocity * self.speed
+        acceleration_vector = self.acceleration * self.orientation
 
-        # 4. Steering and Turning Radius
+        # Update steering angle
         steering_diff = steering_angle - self.current_steering_angle
         steering_diff = np.clip(steering_diff, -self.max_steering_rate * delta_time, self.max_steering_rate * delta_time)
         self.current_steering_angle += steering_diff
 
+        # Rotation matrix
         rotation_matrix = np.array([[math.cos(self.current_steering_angle), -math.sin(self.current_steering_angle)],
                                     [math.sin(self.current_steering_angle), math.cos(self.current_steering_angle)]])
-
         self.orientation = np.dot(rotation_matrix, self.orientation)
-        self.velocity = np.dot(rotation_matrix, self.velocity)
+        self.velocity = np.dot(rotation_matrix, self.velocity) + (acceleration_vector + drag_force / self.mass) * delta_time
 
-        # 5. Update Velocity and Position
-        self.velocity += (acceleration_vector + drag_force / self.mass) * delta_time
-        self.position += self.velocity * delta_time + 0.5 * acceleration_vector * delta_time ** 2
+        # Update position
+        self.position += self.velocity * delta_time
 
-        # 7. Speed Caps
+        # Update speed and cache state
         self.speed = np.linalg.norm(self.velocity)
-        if self.speed > self.max_speed:
-            self.velocity = (self.velocity / self.speed) * self.max_speed
+        self.cache_state(track_2D,delta_time,road_width)
+
+    def cache_state(self, track_2D,delta_time,road_width):
+        current_angle = np.arctan2(self.orientation[1], self.orientation[0])
+        #self.angle=current_angle
+        self.turning_rate = (current_angle - self.previous_angle) / delta_time
+        self.previous_angle = current_angle
         self.lastest_point_idx=self.closest_point_idx
-        self.closest_point_idx,self.distance_to_curr = compute_closest_point_idx(self, track_2D)
-        self.distance_to_central= self.compute_future_point_idx( track_2D)
+        self.closest_point_idx, _ = compute_closest_point_idx(self, track_2D)
+        self.distance_to_central=self.compute_future_point_idx(track_2D,road_width)
         if self.closest_point_idx + 1 < len(track_2D):
             # Direction of the track segment
             track_dir = np.array(track_2D[self.closest_point_idx + 1]) - np.array(track_2D[self.closest_point_idx])
             track_dir /= np.linalg.norm(track_dir)  # Normalize the track direction
 
             # Car's direction
-            car_dir = self.orientation
-
             # Compute the dot product between the car direction and track direction
-            self.alignment = np.dot(track_dir, car_dir)
-
-            # Compute the angle using the arccosine function
+            self.alignment = np.dot(track_dir, self.orientation)
             self.angle = np.arccos(np.clip(self.alignment, -1.0, 1.0))
 
-    def compute_future_point_idx(car, track_2D):
+
+
+        # Compute the angle using the arccosine function
+        self.angle = np.arccos(np.clip(self.alignment, -1.0, 1.0))
+
+
+    def compute_future_point_idx(car, track_2D,road_width):
         if car.closest_point_idx + 1 >= len(track_2D):
             return 0.0  # If it's the last point, return distance 0
 
@@ -217,7 +218,7 @@ class RealisticCar2D:
         den = np.linalg.norm(np.array(p2) - np.array(p1))
         distance = num / den
 
-        return distance
+        return distance/road_width
 
 
 

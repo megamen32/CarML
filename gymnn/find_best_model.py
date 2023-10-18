@@ -87,4 +87,4 @@ if __name__ == '__main__':
     test_results = test_top_models(top_models, env)
 
     for reward, filepath in test_results:
-        print(f"Model {filepath} achieved an average reward of {reward}")
+        print(f"Model {filepath} achieved an average reward of {reward}")#Best Average Reward: -4873.5967768155515 with parameters: (3, 3000, 0.3, 0.1, 0.1, 0.997, 0.5, 3000)

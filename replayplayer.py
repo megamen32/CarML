@@ -1,4 +1,5 @@
 # First, let's import the required libraries
+import os
 import traceback
 
 import pygame
@@ -6,22 +7,67 @@ import numpy as np
 from main import compute_distance_central_line
 
 # Constants
-SCREEN_WIDTH, SCREEN_HEIGHT = 800, 600
-translation = [SCREEN_WIDTH // 4+100, SCREEN_HEIGHT // 4+100]
+WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
+translation = [WINDOW_WIDTH // 4 + 100, WINDOW_HEIGHT // 4 + 100]
 CAR_RADIUS = 5
 scale_factor=1
 # Import additional pygame modules
 import pygame_gui
 manager=None
+from screeninfo import get_monitors
+from multiprocessing import Lock
+
+POSITION_FILE = 'last_position.txt'
+lock = Lock()
+
+def get_screen_resolution():
+    monitor = get_monitors()[0]
+    return monitor.width, monitor.height
+
+SCREEN_WIDTH, SCREEN_HEIGHT = get_screen_resolution()
+
+def get_next_position():
+    with lock:
+        if not os.path.exists(POSITION_FILE):
+            with open(POSITION_FILE, 'w') as f:
+                f.write("0,0")
+
+        x,y=0,0
+        try:
+            with open(POSITION_FILE, 'r') as f:
+                x, y = map(int, f.read().split(','))
+        except:
+            traceback.print_exc()
+
+        new_x = x + WINDOW_HEIGHT  # Здесь 800 - это ширина окна приложения
+        new_y = y
+
+        if new_x+WINDOW_WIDTH > SCREEN_WIDTH:
+            new_x = 0
+            new_y += WINDOW_HEIGHT  # Здесь 600 - это высота окна приложения
+
+        if new_y+WINDOW_HEIGHT > SCREEN_HEIGHT:
+            new_x, new_y = 0, 0
+
+        with open(POSITION_FILE, 'w') as f:
+            f.write(f"{new_x},{new_y}")
+
+    return new_x, new_y
 def init_screen():
     global manager
-    # Initialize screen
-    screen = pygame.display.set_mode((SCREEN_WIDTH, SCREEN_HEIGHT))
-    pygame.display.set_caption('Racing Game Visualization')
-    manager = pygame_gui.UIManager((SCREEN_WIDTH, SCREEN_HEIGHT))
 
+    # Получаем следующую позицию для окна
+    x_position, y_position = get_next_position()
+
+    # Инициализируем экран на указанной позиции
+    os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (x_position,y_position)
+    screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.NOFRAME, pygame.RESIZABLE)
+    pygame.display.set_caption('Racing Game Visualization')
+    manager = pygame_gui.UIManager((WINDOW_WIDTH, WINDOW_HEIGHT))
 
     return screen,manager
+
+
 
 
 def draw_track(  screen,track_2D,road_width):
