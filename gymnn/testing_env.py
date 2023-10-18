@@ -193,11 +193,11 @@ device = 'cuda' if torch.cuda.is_available() else 'cpu'
 from itertools import product
 
 # Define hyperparameters to search over
-hidden_layers_variants=[5]
-num_episodes_options = [10000]
+hidden_layers_variants=[4]
+num_episodes_options = [100000]
 gamma_options = [0.50]
-actor_lr_options = [0.1]
-critic_lr_options = [0.1]
+actor_lr_options = [0.5]
+critic_lr_options = [0.5]
 tau_options = [0.999]
 noise_std_options = [ 0.5]
 replay_buffer_length=[12000]

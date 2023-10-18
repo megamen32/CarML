@@ -1,8 +1,8 @@
 # The `NEAT` section specifies parameters particular to the NEAT algorithm
 # or the experiment itself.  This is the only required section.
 [NEAT]
-fitness_criterion      = max
-fitness_threshold      = 5000.0
+fitness_criterion      = mean
+fitness_threshold      = 50000.0
 no_fitness_termination = False
 pop_size               = 50
 reset_on_extinction    = True
@@ -11,7 +11,7 @@ reset_on_extinction    = True
 initial_connection      = partial 0.5
 activation_default                 = tanh
 activation_mutate_rate             = 0.01
-activation_options                 = tanh
+activation_options                 = sigmoid
 aggregation_default                = sum
 aggregation_mutate_rate            = 0.0
 aggregation_options                = sum

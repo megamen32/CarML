@@ -70,11 +70,15 @@ def init_screen():
 
 
 
-def draw_track(  screen,track_2D,road_width):
+def draw_track(  screen,track_2D,road_width,car_position):
     global manager
     screen.fill((0, 0, 0))  # Fill the screen with black
     # Draw the track
-    scaled_track = [(int(x * scale_factor + translation[0]), int(y * scale_factor + translation[1])) for x, y in track_2D]
+    offset_x = screen.get_width() // 2 - int(car_position[0] * scale_factor)
+    offset_y = screen.get_height() // 2 - int(car_position[1] * scale_factor)
+
+    # Apply the offset to the track's points
+    scaled_track = [(int(x * scale_factor + offset_x), int(y * scale_factor + offset_y)) for x, y in track_2D]
     for i in range(len(scaled_track) - 1):
         x1, y1 = scaled_track[i]
         x2, y2 = scaled_track[i + 1]
@@ -94,7 +98,9 @@ def draw_track(  screen,track_2D,road_width):
 
 
 def draw_car(car, screen, track_2D):
-    car_position = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(car.position)]
+    translation= screen.get_width() // 2 - int(car.position[0] * scale_factor), screen.get_height() // 2 - int(car.position[1] * scale_factor)
+
+    car_position = [screen.get_width() // 2, screen.get_height() // 2]
     pygame.draw.circle(screen, (255, 0, 0), car_position, CAR_RADIUS)
 
     # Compute distance to central line and closest point on central line

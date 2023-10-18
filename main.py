@@ -1,118 +1,14 @@
 # Importing required libraries
-import random
-
-import numpy as np
-import torch
-from torch import Tensor
 
 # Improved Track Representation
 # Using a list of dictionaries to represent the track, encoding curvature and width
-track = [
-    {'curvature': 0, 'width': 10},
-    {'curvature': 0.1, 'width': 10},
-    {'curvature': 0, 'width': 10},
-    {'curvature': -0.1, 'width': 10},
-    {'curvature': 0, 'width': 10},
-]
 
 
-def create_loop_track(radius=100, num_segments=100):
-    """
-    Create a loop track with the given radius and number of segments.
-
-    Parameters:
-        radius (int): The radius of the loop.
-        num_segments (int): The number of segments to divide the loop into.
-
-    Returns:
-        track_2D (list): A list of [x, y] coordinates representing the loop track.
-    """
-    track_2D = []
-    for i in range(num_segments):
-        angle = i * 2 * np.pi / num_segments
-        x = radius * np.cos(angle)
-        y = radius * np.sin(angle)
-        track_2D.append([x, y])
-    track_2D.append(track_2D[0])  # Close the loop
-    return track_2D
 import numpy as np
-
-def create_double_loop_track(radius1=100, radius2=50, num_segments=100):
-    """
-    Create a double loop track with two different radii and number of segments.
-
-    Parameters:
-        radius1 (int): The radius of the first loop.
-        radius2 (int): The radius of the second loop.
-        num_segments (int): The number of segments to divide each loop into.
-
-    Returns:
-        track_2D (list): A list of [x, y] coordinates representing the double loop track.
-    """
-    track_2D = []
-    # Create the first loop
-    for i in range(num_segments):
-        angle = i * 2 * np.pi / num_segments
-        x = radius1 * np.cos(angle)
-        y = radius1 * np.sin(angle)
-        track_2D.append([x, y])
-
-    # Create the second loop with an offset to avoid overlap
-    offset_x, offset_y = radius1 * 2 + radius2, 0
-    for i in range(num_segments):
-        angle = i * 2 * np.pi / num_segments
-        x = radius2 * np.cos(angle) + offset_x
-        y = radius2 * np.sin(angle) + offset_y
-        track_2D.append([x, y])
-
-    return track_2D
-
 
 
 # Decode track into 2D coordinates for visualization (or for more advanced physics)
-def decode_track_to_2D(track, segment_length=1.0):
-    x, y = 0, 0  # Initialize coordinates
-    angle = 0  # Initialize angle
-    track_2D = [(x, y)]  # List to hold 2D coordinates of the track
 
-    for segment in track:
-        dx = segment_length * np.cos(angle)
-        dy = segment_length * np.sin(angle)
-        x += dx
-        y += dy
-        track_2D.append((x, y))
-
-        # Update the angle based on the curvature
-        angle += segment['curvature']
-
-    return track_2D
-
-def create_circular_track(radius, road_width, start_angle=0, end_angle=3/2 * np.pi):
-    # Calculate the circumference of the circle
-    circumference = 2 * np.pi * radius
-
-    # Determine the number of segments based on the circumference and road width
-    num_segments = int(circumference / road_width)
-
-    # Generate the circular track
-    angles = np.linspace(start_angle, end_angle, num_segments)
-    x = radius * np.cos(angles)
-    y = radius * np.sin(angles)
-
-    return list(zip(x, y))
-
-def make_strange_trace(forward=True,road_width = 10):
-    # Create the first circle
-    first_circle_radius =random.randint(59,200)
-    first_circle_segments = 100
-    if forward:
-        first_circle = create_circular_track(first_circle_radius,  road_width)
-    else:
-        first_circle = create_circular_track(first_circle_radius,  road_width,0,-3/2*np.pi)
-# Remove last 25% to make space for the second circle
-
-    final_track = first_circle
-    return final_track
 
 def compute_track_length(track_2D):
     return sum(np.linalg.norm(np.array(track_2D[i]) - np.array(track_2D[i - 1])) for i in range(1, len(track_2D)))
@@ -256,7 +152,7 @@ def place_car_on_track(car, track_2D, start_index):
     Returns:
         None: The car's position is updated in place.
     """
-    car.position = np.array(track_2D[start_index % len(track_2D)])
+    car.position = np.array(track_2D[start_index % len(track_2D)], dtype=np.float32)
 
     # Compute the direction towards the next point in the track
     next_point = np.array(track_2D[(start_index + 1) % len(track_2D)])
@@ -267,9 +163,10 @@ def place_car_on_track(car, track_2D, start_index):
 
     # Set the car's velocity to make it head towards the centerline
     car.orientation=direction_vector
-    car.velocity = direction_vector
-    car.acceleration=0.51
+    #car.velocity = direction_vector
+    #car.acceleration=0.51
     car.closest_point_idx=start_index
+    #car.closest_point_idx=start_index
 
 
 def distance_to_centerline(point, segment_start, segment_end):

@@ -79,6 +79,7 @@ config = neat.Config(neat.DefaultGenome, neat.DefaultReproduction,
 checkpoint_path = max([f for f in os.listdir() if f.startswith('neat-checkpoint-')], default=None, key=os.path.getctime)
 if checkpoint_path:
     p = neat.Checkpointer.restore_checkpoint(checkpoint_path)
+
 else:
     p = neat.Population(config)
 
@@ -93,10 +94,10 @@ if __name__=='__main__':
 
     if single_thread:
         # Run the NEAT algorithm for up to 300 generations
-        winner = p.run(eval_genomes, 300)
+        winner = p.run(eval_genomes, 3000)
     else:
         # Determine the number of workers (processes) to use. Here, we use the number of available CPU cores.
         num_workers = multiprocessing.cpu_count()-1
         evaluator = ParallelEvaluator(num_workers, eval_genome)
-        winner = p.run(evaluator.evaluate, 300)
+        winner = p.run(evaluator.evaluate, 3000)
 

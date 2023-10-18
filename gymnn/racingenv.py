@@ -10,6 +10,7 @@ import torch
 from gym import spaces
 
 import main
+import trackgenerator
 from main import RealisticCar2D, place_car_on_track, check_collision_with_track, compute_travel_distance
 from replayplayer import init_screen, draw_track, draw_car
 
@@ -40,7 +41,7 @@ def get_state(car, track_2D):
 
 class RacingEnv(gym.Env):
     def advanced_reward_function(self,car, collision):
-        COLLISION_PENALTY = -1000.0
+        COLLISION_PENALTY = -10.0
         BACKWARD_PENALTY = -50.0
         FINISH_MULTIPLIER = 50000
         # Check for collisions
@@ -52,11 +53,11 @@ class RacingEnv(gym.Env):
             return BACKWARD_PENALTY, False
 
         # Calculate distance traveled
-        distance_reward = 0
-        if car.closest_point_idx > car.lastest_point_idx:
+        distance_reward = -0.1
+        #if car.closest_point_idx > car.lastest_point_idx:
             # Normalize by dividing by the total track length
-            total_track_length = sum(np.linalg.norm(np.array(self.track_2D[i]) - np.array(self.track_2D[i - 1])) for i in range(1, len(self.track_2D)))
-            distance = compute_travel_distance(self.track_2D, car.position, car.closest_point_idx)/total_track_length
+
+        distance_reward = compute_travel_distance(self.track_2D, car.position, car.closest_point_idx)/self.total_track_length
 
         finish_reward = 0
         if car.closest_point_idx == self.total_segments - 2:
@@ -70,7 +71,7 @@ class RacingEnv(gym.Env):
         total_reward = distance_reward + alignment_reward + finish_reward
 
         return total_reward, finish_reward > 0
-    def __init__(self, road_width=100, delta_time=1,max_time=100,render=True,patience=10):
+    def __init__(self, road_width=100, delta_time=1,max_time=1000,render=True,patience=30):
         super(RacingEnv, self).__init__()
         self._road_width=road_width
         self.patience=patience
@@ -79,10 +80,11 @@ class RacingEnv(gym.Env):
         self.delta_time=delta_time
         # Action space: [acceleration, turn_angle]
         self.action_space = spaces.Box(low=np.array([-1.0, -1.0]), high=np.array([1.0, 1.0]), dtype=np.float32)
-
+        self.CHECK_IMPROVEMENT_INTERVAL=5
+        self.REWARD_HISTORY_SIZE=100
         # State space
 
-        self.cumulative_reward = 0  # To store cumulative rewards
+
         self._render=render
         if render:
             pygame.init()
@@ -98,17 +100,22 @@ class RacingEnv(gym.Env):
             options = {}
         self.road_width =random.uniform(0.2,1.5)* self._road_width
         self.segments_length = self.road_width // 10
-        self.track_2D=main.make_strange_trace(random.random() > 0.5, self.segments_length)
+        self.track_2D= trackgenerator.create_complex_track_v2(road_width= self.road_width)
         self.total_segments=len(self.track_2D)
         self.car = RealisticCar2D()
 
         place_car_on_track(self.car, self.track_2D, 0)
+        self.total_track_length = sum(np.linalg.norm(np.array(self.track_2D[i]) - np.array(self.track_2D[i - 1])) for i in range(1, len(self.track_2D)))
         self.time=0
         self._step=0
         self.reward=0
         self.last_best_reward=-math.inf
+        self.avg_recent_reward = 0
+        self.last_avg_recent_reward = -math.inf
         self.no_improve_counter=0
         self.cumulative_reward=0
+        #self.reward_history = [0] * self.REWARD_HISTORY_SIZE
+        self.current_reward_index = 0
         self.finish=False
         state = get_state(self.car, self.track_2D)  # Assuming single car for simplicity
         return state
@@ -126,22 +133,37 @@ class RacingEnv(gym.Env):
         self.reward, self.finish = self.advanced_reward_function(self.car, collision)
         self.cumulative_reward += self.reward
         done = collision or self.max_time <self.time or self.finish
-        if self.cumulative_reward > self.last_best_reward:
-            self.last_best_reward = self.cumulative_reward
-            self.no_improve_counter = 0
-        else:
-            self.no_improve_counter += 1
-        if self.no_improve_counter >= self.patience:
-            done=True
+        #self.reward_history[self.current_reward_index] = self.reward
+        done = self.is_no_improve(done)
 
         return next_state, self.reward, done, {}
+
+    def is_no_improve(self, done):
+        alpha = 0.5  # Smoothing coefficient
+        self.avg_recent_reward = alpha * self.cumulative_reward + (1 - alpha) * self.avg_recent_reward
+        if self.car.closest_point_idx <= self.car.lastest_point_idx:
+            self.no_improve_counter += 1
+        else:
+            self.backward_or_stuck_counter = 0
+        if self.avg_recent_reward > self.last_best_reward:
+            self.last_best_reward = self.avg_recent_reward
+            self.no_improve_counter = 0
+        elif self.avg_recent_reward < self.last_avg_recent_reward:
+            self.no_improve_counter += 1
+
+        if self.no_improve_counter >= self.patience:
+            done = True
+
+        self.last_avg_recent_reward = self.avg_recent_reward
+
+        return done
 
     def render(self, mode='human',noise_std=None,custom_info=None):
         # Clear the screen
         self.screen.fill((0, 0, 0))
 
         # Draw the track
-        draw_track(self.screen, self.track_2D, self.road_width)
+        draw_track(self.screen, self.track_2D, self.road_width,self.car.position)
         speed_text = self.font.render(f"Speed: {self.car.speed:.2f} dist_central={self.car.distance_to_central:.2f}  t:{self.time:.2f}/{self.max_time}", True, (255, 255, 255))
         current_reward_text = self.font.render(f"Current Reward: {self.reward:.2f}", True, (255, 255, 255))
         cumulative_reward_text = self.font.render(f"Cumulative Reward: {self.cumulative_reward:.2f}", True, (255, 255, 255))
