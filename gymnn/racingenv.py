@@ -71,7 +71,7 @@ class RacingEnv(gym.Env):
         total_reward = distance_reward + alignment_reward + finish_reward
 
         return total_reward, finish_reward > 0
-    def __init__(self, road_width=100, delta_time=1,max_time=1000,render=True,patience=30):
+    def __init__(self, road_width=100, delta_time=1,max_time=500,render=True,patience=30):
         super(RacingEnv, self).__init__()
         self._road_width=road_width
         self.patience=patience
@@ -141,6 +141,16 @@ class RacingEnv(gym.Env):
     def is_no_improve(self, done):
         alpha = 0.5  # Smoothing coefficient
         self.avg_recent_reward = alpha * self.cumulative_reward + (1 - alpha) * self.avg_recent_reward
+        position_change = np.linalg.norm(self.car.position - self.car.prev_position)
+
+
+        if position_change < self.car.max_speed//2 and abs(self.car.current_steering_angle) > 0.8 and self.car.speed>0.05:
+                self.spin_change += 1
+        else:
+                self.spin_change = 0
+        if self.spin_change>5:
+            self.no_improve_counter+=5
+            self.spin_change=0
         if self.car.closest_point_idx <= self.car.lastest_point_idx:
             self.no_improve_counter += 1
         else:
@@ -168,8 +178,11 @@ class RacingEnv(gym.Env):
         current_reward_text = self.font.render(f"Current Reward: {self.reward:.2f}", True, (255, 255, 255))
         cumulative_reward_text = self.font.render(f"Cumulative Reward: {self.cumulative_reward:.2f}", True, (255, 255, 255))
         if noise_std:
+            if isinstance(noise_std,float):
                 noise = self.font.render(f"noise: {noise_std:.2f}", True, (255, 255, 255))
-                self.screen.blit(noise, (10, 130))  # Below the cumulative_reward_text
+            else:
+                noise = self.font.render(f"noise: {noise_std}", True, (255, 255, 255))
+            self.screen.blit(noise, (10, 130))  # Below the cumulative_reward_text
         if custom_info:
             noise = self.font.render(custom_info, True, (255, 255, 255))
             self.screen.blit(noise, (10, 170))  # Below the cumulative_reward_text

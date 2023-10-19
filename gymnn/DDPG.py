@@ -53,7 +53,25 @@ class Critic(nn.Module):
     def forward(self, state, action):
         return self.fc(torch.cat([state, action], dim=1))
 
+class OUNoise:
+    def __init__(self, size, mu=0.0, theta=0.15, sigma=0.2):
+        """Initialize parameters and noise process."""
+        self.mu = mu * np.ones(size)
+        self.theta = theta
+        self.sigma = sigma
+        self.size = size
+        self.reset()
 
+    def reset(self):
+        """Reset the internal state (= noise) to mean (mu)."""
+        self.state = np.copy(self.mu)
+
+    def sample(self):
+        """Update internal state and return it as a noise sample."""
+        x = self.state
+        dx = self.theta * (self.mu - x) + self.sigma * np.random.randn(self.size)
+        self.state = x + dx
+        return self.state
 def save_model(actor_model, critic_model, params, reward, filename):
     """Saves the actor and critic models along with hyperparameters and max reward."""
     torch.save({
@@ -98,7 +116,10 @@ def train(env, actor, critic, params,num_episodes=1000, gamma=0.99, actor_lr=0.1
     replay_buffer = deque(maxlen=int(params[7]))
     last_100_rewards=[]
     no_training_frame=0
-    frames_to_train=10
+    frames_to_train=100
+    noise = OUNoise(size=action_dim)
+
+
     for episode in range(num_episodes):
         state = env.reset()
         done = False
@@ -114,11 +135,11 @@ def train(env, actor, critic, params,num_episodes=1000, gamma=0.99, actor_lr=0.1
                     param_group['lr'] = learning_rate
                 for param_group in critic_optimizer.param_groups:
                     param_group['lr'] = learning_rate
-                if random.random()<noise_cur:
-                    noise = np.random.normal(0, noise_cur, size=action_dim)
-                    action = noise
-                else:
-                    action = actor(state_tensor).cpu().numpy()
+
+                action = actor(state_tensor).cpu().numpy()
+
+                noise.mu = noise_cur
+                action = action + noise.sample()
 
 
 
@@ -139,13 +160,13 @@ def train(env, actor, critic, params,num_episodes=1000, gamma=0.99, actor_lr=0.1
 
 
             state = next_state
-            #env.render(mode='train',noise_std=noise_cur)
+            env.render(mode='train',noise_std=f'{noise.state}',custom_info=f'{episode} {params}')
             no_training_frame+=1
 
-            if len(replay_buffer) > 32 and no_training_frame>frames_to_train:
+            if len(replay_buffer) > 512 and no_training_frame>frames_to_train:
                 no_training_frame=0
-                for _ in range(frames_to_train):
-                    minibatch = random.sample(replay_buffer, 32)
+                for _ in range(5):
+                    minibatch = random.sample(replay_buffer, 512)
                     states, actions, rewards, next_states, dones = zip(*minibatch)
 
                     states = torch.stack([torch.FloatTensor(s).to(device) for s in states])
@@ -222,7 +243,7 @@ def train_single():
         actor=actor.to(device)
         critic=critic.to(device)
         print(f"Training with parameters: layers={params[0]} num_episodes={params[1]}, gamma={params[2]}, actor_lr={params[3]}, critic_lr={params[4]}, tau={params[5]}, noise_std={params[6]}")
-        env = RacingEnv(render=False)
+        env = RacingEnv(render=True)
         # Train the model with the current set of parameters
         actor,critic =train(env, actor, critic, params=params, num_episodes=params[1], gamma=params[2], actor_lr=params[3], critic_lr=params[4], tau=params[5], noise_std=params[6], model__pth=model__pth)
         env.close()

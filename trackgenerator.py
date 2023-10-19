@@ -202,12 +202,13 @@ def make_strange_trace(forward=True,road_width = 10):
     return final_track
 def create_complex_track_v2(num_parts=20, road_width=30, max_angle=np.pi/6, max_attempts=10):
     if random.random()<0.5:
-        return make_strange_trace(random.random()<0.5,road_width)
+        return make_strange_trace(random.random()<0.5,road_width//2)
     track = [(0, 0)]  # Starting point
     segment_length=road_width
 
     last_angle = random.uniform(0, 2*np.pi)  # Starting direction
 
+    total_segment=0
     for _ in range(num_parts):
         added_segment = False  # Flag to check if we've added a segment in this iteration
         attempt = 0
@@ -228,12 +229,15 @@ def create_complex_track_v2(num_parts=20, road_width=30, max_angle=np.pi/6, max_
                 track.extend(segment[1:])  # Exclude the first point to avoid repetition
                 added_segment = True
                 attempt =0
+                total_segment+=1
             else:
                 attempt += 1
 
         if not added_segment:  # If we couldn't add a segment after max_attempts
             print(f"Failed to add a segment after {max_attempts} attempts.")
             break
+    if total_segment<num_parts/2:
+        return make_strange_trace(random.random()<0.5,road_width//2)
 
     return track
 

@@ -4,7 +4,7 @@ import torch
 import os
 
 from gymnn.racingenv import RacingEnv
-from gymnn.testing_env import Actor, Critic, state_dim, action_dim, device
+from gymnn.DDPG import Actor, Critic, state_dim, action_dim, device
 
 
 def load_max_reward_from_file(filename):
