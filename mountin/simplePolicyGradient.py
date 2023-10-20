@@ -28,7 +28,8 @@ optimizer = optim.Adam(policy.parameters(), lr=0.0007)
 
 num_episodes = 1000
 gamma = 0.99
-last_max = 30000
+prev_max_step = 30000
+max_wait_for_better_results = 1.2
 for episode in range(num_episodes):
     state,_ = env.reset()
     rewards = []
@@ -37,7 +38,7 @@ for episode in range(num_episodes):
     step=0
     done=False
 
-    while not done and step<last_max:
+    while not done and step<prev_max_step*max_wait_for_better_results:
         step+=1
         probs = policy(torch.FloatTensor(state))
 
@@ -49,8 +50,16 @@ for episode in range(num_episodes):
 
         state, reward, done, _,_ = env.step(action)
         rewards.append(reward)
-    if step*1.2<last_max:
-        last_max=step*1.2
+
+    if step* max_wait_for_better_results <last_max:
+        prev_max_step=step
+        max_wait_for_better_results*=0.90
+    if prev_max_step<step:
+        no_improve_counter+=1
+    if no_improve_counter>20:
+        max_wait_for_better_results*=1.1
+        no_improve_counter=0
+
     # Compute returns
     returns = []
     R = 0
