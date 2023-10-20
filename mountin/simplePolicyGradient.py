@@ -30,6 +30,7 @@ num_episodes = 1000
 gamma = 0.99
 prev_max_step = 30000
 max_wait_for_better_results = 1.2
+no_improve_counter=0
 for episode in range(num_episodes):
     state,_ = env.reset()
     rewards = []
