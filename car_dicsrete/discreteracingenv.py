@@ -15,37 +15,26 @@ from main import RealisticCar2D, place_car_on_track, check_collision_with_track,
 from replayplayer import init_screen, draw_track, draw_car
 
 
-def get_state(car, track_2D,total_track_length, n=5):
+def get_state(car, track_2D,total_track_length, n=1):
     # Lateral velocity (velocity component perpendicular to the car's orientation)
-    lateral_velocity = np.dot(car.velocity, np.array([-car.orientation[1], car.orientation[0]]))
 
     # Values for next n points
-    curve_directions = []
-    curve_distances = []
 
-    for i in range(1, n + 1):
-        idx = min(car.closest_point_idx + i, len(track_2D) - 1)
-        next_dir = np.array(track_2D[idx]) - car.position
 
-        curve_dir = 1 if np.cross(next_dir, car.orientation) > 0 else -1  # 1 for left turn, -1 for right turn
-        curve_distance = np.linalg.norm(next_dir)
 
-        curve_directions.append(curve_dir)
-        curve_distances.append(curve_distance/total_track_length)
 
     # Flatten the lists to add to the state
-    curve_directions = np.array(curve_directions).flatten()
-    curve_distances = np.array(curve_distances).flatten()
+    curve_directions = np.array(car.curve_directions).flatten()
+    curve_distances = np.array(car.curve_distances).flatten()
     drift=1 if car.drifting else 0
     return torch.FloatTensor([
         car.speed,
-        car.current_steering_angle,
-        drift,car.distance_to_central,
-
         car.acceleration,
         car.turning_rate,
-        lateral_velocity,
+        car.lateral_velocity,
+        car.distance_to_central,
         car.angle,
+        car.alignment,
         *curve_distances,
         *curve_directions
     ])
@@ -71,7 +60,7 @@ class DiscreteRacingEnv(gym.Env):
             return BACKWARD_PENALTY, False
 
         # Calculate distance traveled
-        distance_reward = -1
+        distance_reward = -0.1
         if car.closest_point_idx > car.lastest_point_idx:
             # Normalize by dividing by the total track length
 
@@ -91,7 +80,7 @@ class DiscreteRacingEnv(gym.Env):
         total_reward = distance_reward + alignment_reward + finish_reward
 
         return total_reward, finish_reward > 0
-    def __init__(self, road_width=100, delta_time=1,max_time=500,render=True,patience=100):
+    def __init__(self, road_width=100, delta_time=1,max_time=500,render=True,patience=500):
         super(DiscreteRacingEnv, self).__init__()
         self._road_width=road_width
         self.patience=patience
@@ -120,7 +109,7 @@ class DiscreteRacingEnv(gym.Env):
             options = {}
         self.road_width = self._road_width#*random.uniform(0.2,1.5)
         self.segments_length = self.road_width // 5
-        self.track_2D= trackgenerator.make_strange_trace(road_width= self.segments_length,radius=200)
+        self.track_2D= trackgenerator.create_complex_track_v2(road_width= self.segments_length)#,radius=200)
         self.total_segments=len(self.track_2D)
         self.car = RealisticCar2D()
 
@@ -199,7 +188,41 @@ class DiscreteRacingEnv(gym.Env):
 
         # Draw the track
         draw_track(self.screen, self.track_2D, self.road_width,self.car.position)
-        speed_text = self.font.render(f"Speed: {self.car.speed:.2f} dist_central={self.car.distance_to_central:.2f}  t:{self.time:.2f}/{self.max_time}", True, (255, 255, 255))
+        speed_text = self.font.render(f"Speed: {self.car.speed:.2f}", True, (255, 255, 255))
+        distance_to_central_text = self.font.render(f"Distance to Central: {self.car.distance_to_central:.2f}", True, (255, 255, 255))
+        acceleration_text = self.font.render(f"Acceleration: {self.car.acceleration:.2f}", True, (255, 255, 255))
+        turning_rate_text = self.font.render(f"Turning Rate: {self.car.turning_rate:.2f}", True, (255, 255, 255))
+        lateral_velocity_text = self.font.render(f"Lateral Velocity: {self.car.lateral_velocity:.2f}", True, (255, 255, 255))
+        angle_text = self.font.render(f"Angle: {math.degrees(self.car.angle):.2f}", True, (255, 255, 255))
+        alignment_text = self.font.render(f"Alignment: {self.car.alignment:.2f}", True, (255, 255, 255))
+
+        # Curve information (assuming you have n=2 for now, can be extended for more)
+        curve_1_distance_text = self.font.render(f"Curve 1 Distance: {self.car.curve_distances[0]:.2f}", True, (255, 255, 255))
+        curve_1_direction_text = self.font.render(f"Curve 1 Direction: {'Left' if self.car.curve_directions[0] == 1 else 'Right'}", True, (255, 255, 255))
+
+        # Drawing them on the screen
+        y_offset = 210  # Starting y-coordinate
+        y_gap = 40  # Gap between each text
+
+        self.screen.blit(speed_text, (10, y_offset))
+        y_offset += y_gap
+        self.screen.blit(distance_to_central_text, (10, y_offset))
+        y_offset += y_gap
+        self.screen.blit(acceleration_text, (10, y_offset))
+        y_offset += y_gap
+        self.screen.blit(turning_rate_text, (10, y_offset))
+        y_offset += y_gap
+        self.screen.blit(lateral_velocity_text, (10, y_offset))
+        y_offset += y_gap
+        self.screen.blit(angle_text, (10, y_offset))
+        y_offset += y_gap
+        self.screen.blit(alignment_text, (10, y_offset))
+        y_offset += y_gap
+        self.screen.blit(curve_1_distance_text, (10, y_offset))
+        y_offset += y_gap
+        self.screen.blit(curve_1_direction_text, (10, y_offset))
+        y_offset += y_gap
+        speed_text = self.font.render(f"t:{self.time:.2f}/{self.max_time}", True, (255, 255, 255))
         current_reward_text = self.font.render(f"Current Reward: {self.reward:.2f}", True, (255, 255, 255))
         cumulative_reward_text = self.font.render(f"Cumulative Reward: {self.cumulative_reward:.2f}", True, (255, 255, 255))
         if noise_std:

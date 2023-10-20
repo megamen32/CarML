@@ -4,7 +4,7 @@ import traceback
 
 import pygame
 import numpy as np
-from main import compute_distance_central_line
+from main import compute_distance_central_line, RealisticCar2D
 
 # Constants
 WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
@@ -99,7 +99,7 @@ def draw_track(  screen,track_2D,road_width,car_position):
 
 
 
-def draw_car(car, screen, track_2D):
+def draw_car(car:RealisticCar2D, screen, track_2D):
     translation= screen.get_width() // 2 - int(car.position[0] * scale_factor), screen.get_height() // 2 - int(car.position[1] * scale_factor)
 
     car_position = [screen.get_width() // 2, screen.get_height() // 2]
@@ -111,7 +111,7 @@ def draw_car(car, screen, track_2D):
     goal = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[car.lastest_point_idx])]
     pygame.draw.circle(screen, (0,255, 0), goal, 3)
 
-    ngoal = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[min(car.closest_point_idx+2,len(track_2D)-1)])]
+    ngoal = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[min(car.closest_point_idx+car.n*car.curve_step,len(track_2D)-1)])]
     pygame.draw.circle(screen, (0,255, 255), ngoal, 3)
 
     #pygame.draw.line(screen, (0, 255, 0), car_position, closest_point_scaled, 1)
@@ -120,34 +120,4 @@ def draw_car(car, screen, track_2D):
     scaled_velocity = [int(v * 3) for v in car.velocity]  # Assuming car.velocity is a 2D vector
     velocity_endpoint = [car_position[i] + scaled_velocity[i] for i in range(2)]
     pygame.draw.line(screen, (255, 255, 0), car_position, velocity_endpoint, 1)
-    if car.closest_point_idx + 1 < len(track_2D):
-        # Direction of the track segment
-        dir_vector = np.array(track_2D[car.closest_point_idx + 1]) - np.array(track_2D[car.closest_point_idx])
-        # Normalize the direction
-        dir_vector /= np.linalg.norm(dir_vector)
-
-        # Compute the two potential perpendicular directions
-        perp_vector1 = np.array([-dir_vector[1], dir_vector[0]])
-        perp_vector2 = -perp_vector1  # The opposite direction
-
-        # Compute points along these vectors
-        point1 = car.position + 0.1 * perp_vector1
-        point2 = car.position + 0.1 * perp_vector2
-
-        # Determine which point is closer to the track segment's center
-        segment_center = 0.5 * (np.array(track_2D[car.closest_point_idx]) + np.array(track_2D[car.closest_point_idx + 1]))
-        if np.linalg.norm(point1 - segment_center) < np.linalg.norm(point2 - segment_center):
-            perp_vector = perp_vector1
-        else:
-            perp_vector = perp_vector2
-
-        # Find the intersection point on the track
-        intersection_point = car.position + car.distance_to_central * perp_vector
-
-        car_position = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(car.position)]
-        intersection_point_scaled = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(intersection_point)]
-
-        # Draw the perpendicular line
-        pygame.draw.line(screen, (0, 100, 100), tuple(car_position), tuple(intersection_point_scaled), 3)
-
 

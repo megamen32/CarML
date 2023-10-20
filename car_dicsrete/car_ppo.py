@@ -19,9 +19,9 @@ def init_weights(m):
 
 # Параметры
 GAMMA = 0.99
-LR = 0.0007
-CLIP_EPSILON = 0.02
-EPOCHS = 2
+LR = 0.000007
+CLIP_EPSILON = 0.2
+EPOCHS = 20
 BATCH_SIZE = 2048*32
 
 
@@ -32,15 +32,15 @@ class ActorCritic(nn.Module):
         super(ActorCritic, self).__init__()
 
         self.actor = nn.Sequential(
-            nn.Linear(input_dim, neurans),nn.ReLU(),
-            nn.Linear(neurans, neurans),nn.ReLU(),
+            nn.Linear(input_dim, neurans),nn.Tanh(),
+            nn.Linear(neurans, neurans),nn.Tanh(),
 
             nn.Linear(neurans, n_actions),nn.Softmax(dim=-1)
         )
 
         self.critic = nn.Sequential(
-            nn.Linear(input_dim, neurans),nn.ReLU(),
-            nn.Linear(neurans, neurans),nn.ReLU(),
+            nn.Linear(input_dim, neurans),nn.Tanh(),
+            nn.Linear(neurans, neurans),nn.Tanh(),
 
             nn.Linear(neurans, 1)
         )

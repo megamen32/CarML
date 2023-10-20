@@ -40,7 +40,7 @@ def draw_net(config, genome, screen,inputs,output_activations, node_radius=5, no
 
         pygame.draw.circle(screen, (255, 0, 0), pos, node_radius)
         try:
-            activation_text = font.render("{:.2f}".format(all_activations[key]), True, (0, 0, 0))
+            activation_text = font.render("{:.2f}".format(all_activations[key]), True, (0, 100, 0))
             screen.blit(activation_text, (pos[0] - node_radius // 2, pos[1] - font_size // 2))
         except:pass
     # Рисуем связи

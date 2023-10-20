@@ -27,7 +27,7 @@ import math
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=1, drag_coefficient=0.2, max_steering_rate=0.05):
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=1, drag_coefficient=0.2, max_steering_rate=0.05,n=1,curve_step=2):
         self.position = position
         self.velocity = velocity
         self.orientation = np.array([1.0, 0.0])
@@ -50,6 +50,13 @@ class RealisticCar2D:
         self.prev_position=self.position
         self.prev_orientation=self.orientation
         self.drifting=False
+        self.lateral_velocity=0
+        self.n=n
+        self.alignment=0
+        self.curve_step=curve_step
+        self.curve_directions = [0 for _ in range(n)]
+        self.curve_distances =  [0 for _ in range(n)]
+        #print('start',len(self.curve_directions))
 
     def update_position(self, delta_time, track_2D,road_width, acceleration=0.0, steering_angle=0.0):
         # Update acceleration
@@ -82,7 +89,6 @@ class RealisticCar2D:
             if self.speed > 0.1 and not (self.speed > 0.9):
                 self.drifting=False
                 self.current_steering_angle += steering_diff
-
                 # Rotation matrix
                 rotation_matrix = np.array([[math.cos(self.current_steering_angle), -math.sin(self.current_steering_angle)],
                                             [math.sin(self.current_steering_angle), math.cos(self.current_steering_angle)]])
@@ -106,10 +112,11 @@ class RealisticCar2D:
         self.current_angle = np.arctan2(self.orientation[1], self.orientation[0])
         #self.angle=current_angle
         self.turning_rate = (self.current_angle - self.previous_angle) / delta_time
+        self.lateral_velocity = np.dot(self.velocity, np.array([-self.orientation[1], self.orientation[0]]))
 
         self.lastest_point_idx=self.closest_point_idx
         self.closest_point_idx, _ = compute_closest_point_idx(self, track_2D)
-        self.distance_to_central=self.compute_future_point_idx(track_2D,road_width)
+        self.distance_to_central=self.compute_distance_to_central_line(track_2D, road_width)
         if self.closest_point_idx + 1 < len(track_2D):
             # Direction of the track segment
             track_dir = np.array(track_2D[self.closest_point_idx + 1]) - np.array(track_2D[self.closest_point_idx])
@@ -118,10 +125,22 @@ class RealisticCar2D:
             # Car's direction
             # Compute the dot product between the car direction and track direction
             self.alignment = np.dot(track_dir, self.orientation)
-            self.angle = np.arccos(np.clip(self.alignment, -1.0, 1.0))
+            self.angle=self.compute_angle_to_central_line(track_2D)
+            self.curve_directions = []
+            self.curve_distances =  []
+            for i in range(1, (self.n +1)):
+                i=i*self.curve_step
+                idx = min(self.closest_point_idx + i, len(track_2D) - 1)
+                next_dir = np.array(track_2D[idx]) - self.position
 
+                curve_dir =  np.cross(next_dir, self.orientation)  # 1 for left turn, -1 for right turn
+                curve_distance = np.linalg.norm(next_dir)
 
-    def compute_future_point_idx(car, track_2D,road_width):
+                self.curve_directions.append(curve_dir)
+                self.curve_distances.append(curve_distance/(road_width*i))
+                #print(len(self.curve_directions))
+
+    def compute_distance_to_central_line(car, track_2D, road_width):
         if car.closest_point_idx + 1 >= len(track_2D):
             return 0.0  # If it's the last point, return distance 0
 
@@ -138,6 +157,30 @@ class RealisticCar2D:
         distance = num / den
 
         return distance*2/road_width
+    def compute_angle_to_central_line(car, track_2D):
+        # Вычисляем вектор сегмента
+        if car.closest_point_idx + 1 >= len(track_2D):
+            segment_direction = np.array(track_2D[0]) - np.array(track_2D[car.closest_point_idx])
+        else:
+            segment_direction = np.array(track_2D[car.closest_point_idx+1]) - np.array(track_2D[car.closest_point_idx])
+
+        # Вычисляем косинус угла между векторами
+        cos_angle = np.dot(car.orientation, segment_direction) / (np.linalg.norm(car.orientation) * np.linalg.norm(segment_direction))
+        angle_rad = np.arccos(np.clip(cos_angle, -1.0, 1.0))
+
+        # Определяем направление поворота (положительное или отрицательное)
+        cross_product = np.cross(car.orientation, segment_direction)
+        if cross_product < 0:
+            angle_rad = -angle_rad
+
+        #angle_deg = np.degrees(angle_rad)
+        return angle_rad
+
+
+
+
+
+
 
 
 
