@@ -15,34 +15,52 @@ from main import RealisticCar2D, place_car_on_track, check_collision_with_track,
 from replayplayer import init_screen, draw_track, draw_car
 
 
-def get_state(car, track_2D):
+def get_state(car, track_2D,total_track_length, n=5):
     # Lateral velocity (velocity component perpendicular to the car's orientation)
     lateral_velocity = np.dot(car.velocity, np.array([-car.orientation[1], car.orientation[0]]))
 
-    # Next curve direction (simple version; more accurate methods might require analyzing multiple future points)
-    max_idx = min(car.closest_point_idx + 2, len(track_2D) - 1)
-    next_dir = np.array(track_2D[max_idx]) - np.array(track_2D[min(car.closest_point_idx + 1, len(track_2D) - 1)])
-    curve_direction = 1 if np.cross(next_dir, car.orientation) > 0 else -1  # 1 for left turn, -1 for right turn
+    # Values for next n points
+    curve_directions = []
+    curve_distances = []
 
-    # Next curve distance
-    next_curve_distance = np.linalg.norm(np.array(track_2D[max_idx]) - car.position)
+    for i in range(1, n + 1):
+        idx = min(car.closest_point_idx + i, len(track_2D) - 1)
+        next_dir = np.array(track_2D[idx]) - car.position
 
+        curve_dir = 1 if np.cross(next_dir, car.orientation) > 0 else -1  # 1 for left turn, -1 for right turn
+        curve_distance = np.linalg.norm(next_dir)
+
+        curve_directions.append(curve_dir)
+        curve_distances.append(curve_distance/total_track_length)
+
+    # Flatten the lists to add to the state
+    curve_directions = np.array(curve_directions).flatten()
+    curve_distances = np.array(curve_distances).flatten()
+    drift=1 if car.drifting else 0
     return torch.FloatTensor([
         car.speed,
+        car.current_steering_angle,
+        drift,car.distance_to_central,
+
         car.acceleration,
         car.turning_rate,
         lateral_velocity,
-        car.distance_to_central,
         car.angle,
-        next_curve_distance,
-        curve_direction
+        *curve_distances,
+        *curve_directions
     ])
 
-
-class RacingEnv(gym.Env):
+ACTIONS = {
+    0: [0.0, 0.0],  # Do nothing
+    1: [1.0, 0.0],  # Accelerate forward
+    2: [-1.0, 0.0], # Accelerate backward
+    3: [0.0, -1.0], # Turn left
+    4: [0.0, 1.0]   # Turn right
+}
+class DiscreteRacingEnv(gym.Env):
     def advanced_reward_function(self,car, collision):
-        COLLISION_PENALTY = -10.0
-        BACKWARD_PENALTY = -50.0
+        COLLISION_PENALTY = -50.0
+        BACKWARD_PENALTY = -10.0
         FINISH_MULTIPLIER = 5000
         # Check for collisions
         if collision:
@@ -58,7 +76,7 @@ class RacingEnv(gym.Env):
             # Normalize by dividing by the total track length
 
 
-            distance_reward = compute_travel_distance(self.track_2D, car.position, car.closest_point_idx)/self.total_track_length*2
+            distance_reward = compute_travel_distance(self.track_2D, car.position, car.closest_point_idx)/self.total_track_length*100
 
         finish_reward = 0
         if car.closest_point_idx == self.total_segments - 2:
@@ -73,15 +91,15 @@ class RacingEnv(gym.Env):
         total_reward = distance_reward + alignment_reward + finish_reward
 
         return total_reward, finish_reward > 0
-    def __init__(self, road_width=100, delta_time=1,max_time=500,render=True,patience=55):
-        super(RacingEnv, self).__init__()
+    def __init__(self, road_width=100, delta_time=1,max_time=500,render=True,patience=100):
+        super(DiscreteRacingEnv, self).__init__()
         self._road_width=road_width
         self.patience=patience
         self.max_time = max_time
         self.time=0
         self.delta_time=delta_time
         # Action space: [acceleration, turn_angle]
-        self.action_space = spaces.Box(low=np.array([-1.0, -1.0]), high=np.array([1.0, 1.0]), dtype=np.float32)
+        self.action_space = spaces.Discrete(len(ACTIONS))
         self.CHECK_IMPROVEMENT_INTERVAL=5
         self.REWARD_HISTORY_SIZE=100
         # State space
@@ -92,7 +110,7 @@ class RacingEnv(gym.Env):
             pygame.init()
             pygame.font.init()
             self.font = pygame.font.SysFont(None, 36)  # Use default font, size 36
-            self.screen, self.manager,self.screen = init_screen()
+            self.screen, self.manager,self.clock = init_screen()
 
         state=self.reset()
         self.observation_space = spaces.Box(low=-1, high=1, shape=(state.shape[0],), dtype=np.float32)
@@ -101,8 +119,8 @@ class RacingEnv(gym.Env):
         if options is None:
             options = {}
         self.road_width = self._road_width#*random.uniform(0.2,1.5)
-        self.segments_length = self.road_width // 10
-        self.track_2D= trackgenerator.create_complex_track_v2(road_width= self.road_width)
+        self.segments_length = self.road_width // 5
+        self.track_2D= trackgenerator.make_strange_trace(road_width= self.segments_length,radius=200)
         self.total_segments=len(self.track_2D)
         self.car = RealisticCar2D()
 
@@ -119,17 +137,18 @@ class RacingEnv(gym.Env):
         #self.reward_history = [0] * self.REWARD_HISTORY_SIZE
         self.current_reward_index = 0
         self.finish=False
-        state = get_state(self.car, self.track_2D)  # Assuming single car for simplicity
+        state = get_state(self.car, self.track_2D,self.total_track_length)  # Assuming single car for simplicity
         return state
 
 
     def step(self, action):
+        continuous_action = ACTIONS[action]
         self.time+=self.delta_time
         self._step+=1
-        self.car.update_position(track_2D=self.track_2D,acceleration=action[0], steering_angle=action[1], road_width=self.road_width,
+        self.car.update_position(track_2D=self.track_2D,acceleration=continuous_action[0], steering_angle=continuous_action[1], road_width=self.road_width,
                                  delta_time=self.delta_time)
 
-        next_state = get_state(self.car, self.track_2D)
+        next_state = get_state(self.car, self.track_2D,self.total_track_length)
         collision, _ = check_collision_with_track(self.car.position, self.track_2D, road_width=self.road_width)
 
         self.reward, self.finish = self.advanced_reward_function(self.car, collision)
@@ -201,6 +220,7 @@ class RacingEnv(gym.Env):
     # Draw the car
         draw_car(self.car, self.screen, self.track_2D)
 
+        pygame.event.pump()
         # Refresh the display
         pygame.display.flip()
 
@@ -210,11 +230,12 @@ class RacingEnv(gym.Env):
 
     def close(self):
         # Cleanup logic
+        pygame.display.quit()
         pygame.quit()
 
 if __name__ == '__main__':
-    env = RacingEnv()
-    human_action=[0,0]
+    env = DiscreteRacingEnv()
+    human_action=0
     num_to_info=10
     c_infp=0
     rewards=[]
@@ -226,18 +247,16 @@ if __name__ == '__main__':
                 exit()
             elif event.type == pygame.KEYDOWN:
                 if event.key == pygame.K_w:
-                    human_action[0] = 1.0  # forward
+                    human_action = 1  # Accelerate forward
                 elif event.key == pygame.K_s:
-                    human_action[0] = -1.0  # backward
+                    human_action = 2  # Accelerate backward
                 elif event.key == pygame.K_a:
-                    human_action[1] = -1.0  # turn left
+                    human_action = 3  # Turn left
                 elif event.key == pygame.K_d:
-                    human_action[1] = 1.0  # turn right
+                    human_action = 4  # Turn right
             elif event.type == pygame.KEYUP:
-                if event.key in [pygame.K_w, pygame.K_s]:
-                    human_action[0] = 0.0
-                elif event.key in [pygame.K_a, pygame.K_d]:
-                    human_action[1] = 0.0
+                if event.key in [pygame.K_w, pygame.K_s, pygame.K_a, pygame.K_d]:
+                    human_action = 0  # Do nothing
         env.render(mode='human')
         next_state, reward, done, _ = env.step(action=human_action)
         rewards.append(reward)

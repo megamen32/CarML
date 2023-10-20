@@ -27,7 +27,7 @@ import math
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=1, drag_coefficient=0, max_steering_rate=0.05):
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=1, drag_coefficient=0.2, max_steering_rate=0.05):
         self.position = position
         self.velocity = velocity
         self.orientation = np.array([1.0, 0.0])
@@ -49,6 +49,7 @@ class RealisticCar2D:
         self.current_angle=0
         self.prev_position=self.position
         self.prev_orientation=self.orientation
+        self.drifting=False
 
     def update_position(self, delta_time, track_2D,road_width, acceleration=0.0, steering_angle=0.0):
         # Update acceleration
@@ -66,6 +67,7 @@ class RealisticCar2D:
         steering_diff = np.clip(steering_diff, -self.max_steering_rate * delta_time, self.max_steering_rate * delta_time)
         self.current_steering_angle += steering_diff
         if self.speed > 0.9 and (steering_angle > 0.5 or steering_angle < -0.5):
+            self.drifting=True
             # Modify velocity to add drift effect
             drift_vector = self.velocity * self.drift_factor
             self.velocity = (1 - self.drift_factor) * (self.velocity + (acceleration_vector / self.mass) * delta_time) + drift_vector
@@ -76,7 +78,9 @@ class RealisticCar2D:
                                         [math.sin(self.current_steering_angle), math.cos(self.current_steering_angle)]])
             self.orientation = np.dot(rotation_matrix, self.orientation)
         else:
-            if self.speed > 0.1 and not (self.speed > self.max_speed*0.5):
+
+            if self.speed > 0.1 and not (self.speed > 0.9):
+                self.drifting=False
                 self.current_steering_angle += steering_diff
 
                 # Rotation matrix
@@ -84,7 +88,7 @@ class RealisticCar2D:
                                             [math.sin(self.current_steering_angle), math.cos(self.current_steering_angle)]])
                 self.orientation = np.dot(rotation_matrix, self.orientation)
                 self.velocity = np.dot(rotation_matrix, self.velocity)
-            self.velocity+= (acceleration_vector / self.mass) * delta_time
+            self.velocity+= (acceleration_vector / self.mass - self.speed*self.speed**self.max_speed*self.drag_coefficient) * delta_time
 
         # Update position
         self.position += self.velocity * delta_time
@@ -184,8 +188,8 @@ def place_car_on_track(car, track_2D, start_index):
 
     # Set the car's velocity to make it head towards the centerline
     car.orientation=direction_vector
-    #car.velocity = direction_vector
-    #car.acceleration=0.51
+    car.velocity = direction_vector*0.1
+    car.acceleration=1
     car.closest_point_idx=start_index
     #car.closest_point_idx=start_index
 

@@ -25,7 +25,7 @@ class Actor(nn.Module):
 
         # Final layer
         layers.append(nn.Linear(hidden_size, output_dim))
-        layers.append(nn.Tanh())
+        layers.append(nn.Tanh()) #-1,1
 
         self.fc = nn.Sequential(*layers)
 
@@ -160,7 +160,7 @@ def train(env, actor, critic, params,num_episodes=1000, gamma=0.99, actor_lr=0.1
 
 
             state = next_state
-            env.render(mode='train',noise_std=f'{noise.state}',custom_info=f'{episode} {params}')
+            #env.render(mode='train',noise_std=f'{noise.state}',custom_info=f'{episode} {params}')
             no_training_frame+=1
 
             if len(replay_buffer) > 512 and no_training_frame>frames_to_train:
@@ -243,7 +243,7 @@ def train_single():
         actor=actor.to(device)
         critic=critic.to(device)
         print(f"Training with parameters: layers={params[0]} num_episodes={params[1]}, gamma={params[2]}, actor_lr={params[3]}, critic_lr={params[4]}, tau={params[5]}, noise_std={params[6]}")
-        env = RacingEnv(render=True)
+        env = RacingEnv(render=False)
         # Train the model with the current set of parameters
         actor,critic =train(env, actor, critic, params=params, num_episodes=params[1], gamma=params[2], actor_lr=params[3], critic_lr=params[4], tau=params[5], noise_std=params[6], model__pth=model__pth)
         env.close()

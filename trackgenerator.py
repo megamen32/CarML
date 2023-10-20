@@ -188,9 +188,10 @@ def create_circular_track(radius, road_width, start_angle=0, end_angle=3/2 * np.
 
     return list(zip(x, y))
 
-def make_strange_trace(forward=True,road_width = 10):
+def make_strange_trace(forward=True,road_width = 10,radius=None):
     # Create the first circle
-    first_circle_radius =random.randint(59,200)
+
+    first_circle_radius =random.randint(59,200) if not radius else radius
     first_circle_segments = 100
     if forward:
         first_circle = create_circular_track(first_circle_radius,  road_width)
@@ -201,7 +202,7 @@ def make_strange_trace(forward=True,road_width = 10):
     final_track = first_circle
     return final_track
 def create_complex_track_v2(num_parts=20, road_width=30, max_angle=np.pi/6, max_attempts=10):
-    if random.random()<0.5:
+    if random.random()<0.9:
         return make_strange_trace(random.random()<0.5,road_width//2)
     track = [(0, 0)]  # Starting point
     segment_length=road_width

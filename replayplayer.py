@@ -62,10 +62,12 @@ def init_screen():
     # Инициализируем экран на указанной позиции
     os.environ['SDL_VIDEO_WINDOW_POS'] = "%d,%d" % (x_position,y_position)
     screen = pygame.display.set_mode((WINDOW_WIDTH, WINDOW_HEIGHT), pygame.NOFRAME, pygame.RESIZABLE)
+
+    clock = pygame.time.Clock()
     pygame.display.set_caption('Racing Game Visualization')
     manager = pygame_gui.UIManager((WINDOW_WIDTH, WINDOW_HEIGHT))
 
-    return screen,manager
+    return screen,manager,clock
 
 
 

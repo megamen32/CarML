@@ -1,9 +1,11 @@
 import os.path
 
 import neat
+import torch
 from neat.parallel import ParallelEvaluator
 import multiprocessing
 
+from acrobotneat.vis import draw_net
 from car_dicsrete.discreteracingenv import DiscreteRacingEnv
 from gymnn.racingenv import RacingEnv
 
@@ -39,11 +41,13 @@ def eval_genome(genome, config):
         state = env.reset()
         done = False
         while not done:
-            action = [float(a) for a in net.activate(state)]
+            prob = net.activate(state)
+            action = prob.index(max(prob))
             state, reward, done, _ = env.step(action)
             total_reward += reward
             if render:
                 env.render(mode='train')
+                draw_net(config,genome,env.screen,state,prob)
     return total_reward / testing_times
 
 def test_winner(winner_genome, config):
