@@ -6,11 +6,10 @@ import torch.nn as nn
 import torch.optim as optim
 ## model
 class PolicyNetwork(nn.Module):
-    def __init__(self, input_dim, output_dim, hidden_dim=64):
+    def __init__(self, input_dim, output_dim, hidden_dim=128):
         super(PolicyNetwork, self).__init__()
         self.fc = nn.Sequential(
             nn.Linear(input_dim, hidden_dim),nn.ReLU(),
-            nn.Linear(hidden_dim, hidden_dim),nn.ReLU(),
             nn.Linear(hidden_dim, output_dim),
             nn.Softmax(dim=-1)
         )
@@ -29,7 +28,7 @@ optimizer = optim.Adam(policy.parameters(), lr=0.0007)
 
 num_episodes = 1000
 gamma = 0.99
-
+last_max = 30000
 for episode in range(num_episodes):
     state,_ = env.reset()
     rewards = []
@@ -37,7 +36,8 @@ for episode in range(num_episodes):
     log_probs=[]
     step=0
     done=False
-    while not done and step<50000:
+
+    while not done and step<last_max:
         step+=1
         probs = policy(torch.FloatTensor(state))
 
@@ -49,6 +49,8 @@ for episode in range(num_episodes):
 
         state, reward, done, _,_ = env.step(action)
         rewards.append(reward)
+    if step*1.2<last_max:
+        last_max=step*1.2
     # Compute returns
     returns = []
     R = 0
