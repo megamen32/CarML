@@ -51,7 +51,7 @@ for episode in range(num_episodes):
         state, reward, done, _,_ = env.step(action)
         rewards.append(reward)
 
-    if step* max_wait_for_better_results <last_max:
+    if step* max_wait_for_better_results <prev_max_step:
         prev_max_step=step
         max_wait_for_better_results*=0.90
     if prev_max_step<step:
