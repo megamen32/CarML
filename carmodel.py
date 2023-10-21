@@ -27,7 +27,7 @@ import math
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=0.2, drag_coefficient=0.2, max_steering_rate=10,n=3,curve_step=4):
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=0.2, drag_coefficient=0.2, max_steering_rate=0.1,n=3,curve_step=4):
         self.position = position
         self.velocity = velocity
         self.orientation = np.array([1.0, 0.0])
@@ -55,6 +55,7 @@ class RealisticCar2D:
         self.n=n
         self.alignment=0
         self.curve_step=curve_step
+        self.closest_central_point=np.array([0,0])
         self.curve_directions = [0 for _ in range(n)]
         self.curve_distances =  [0 for _ in range(n)]
         #print('start',len(self.curve_directions))
@@ -103,9 +104,9 @@ class RealisticCar2D:
             self.speed = self.max_speed
         self.speed_normilize=self.speed/self.max_speed
 
-        self.cache_state(track_2D,delta_time,road_width)
 
-    def cache_state(self, track_2D,delta_time,road_width):
+
+    def cache_state(self, track_2D,delta_time,road_width,segments_length):
         self.previous_angle = self.current_angle
         self.current_angle = np.arctan2(self.orientation[1], self.orientation[0])
         #self.angle=current_angle
@@ -113,8 +114,8 @@ class RealisticCar2D:
         self.lateral_velocity = np.dot(self.velocity, np.array([-self.orientation[1], self.orientation[0]]))
 
         self.lastest_point_idx=self.closest_point_idx
-        self.closest_point_idx, _ = compute_closest_point_idx(self, track_2D)
-        self.distance_to_central=self.compute_distance_to_central_line(track_2D, road_width)
+        self.closest_point_idx,_ = compute_closest_point_idx(self, track_2D)
+        self.distance_to_central=1-self.compute_distance_to_central_line(track_2D, road_width)
         if self.closest_point_idx + 1 < len(track_2D):
             # Direction of the track segment
             track_dir = np.array(track_2D[self.closest_point_idx + 1]) - np.array(track_2D[self.closest_point_idx])
@@ -123,7 +124,7 @@ class RealisticCar2D:
             # Car's direction
             # Compute the dot product between the car direction and track direction
             self.alignment = np.dot(track_dir, self.orientation)
-            self.angle=self.compute_angle_to_central_line(track_2D)
+            self.angle=self.compute_angle_to_central_line(track_2D)/np.pi
             self.curve_directions = []
 
 
@@ -153,7 +154,7 @@ class RealisticCar2D:
                 curve_dir = np.sign(np.cross(next_dir, current_dir)) * angle  # Using cross product to determine the direction of rotation
 
                 self.curve_directions.append(curve_dir)
-                raw_curve_distances.append(1-curve_distance/road_width)
+                raw_curve_distances.append(curve_distance/segments_length/self.curve_step)
 
             # Normalize raw_curve_distances by their sum
             #sum_distance = sum(raw_curve_distances)
@@ -165,22 +166,27 @@ class RealisticCar2D:
                 #print(len(self.curve_directions))
 
     def compute_distance_to_central_line(car, track_2D, road_width):
-        if car.closest_point_idx + 1 >= len(track_2D):
-            return 0.0  # If it's the last point, return distance 0
+            if car.closest_point_idx + 1 >= len(track_2D):
+                return 0.0  # If it's the last point, return distance 0
 
-        p1 = track_2D[car.closest_point_idx]
-        p2 = track_2D[car.closest_point_idx + 1]
-        p = car.position
+            p1 = np.array(track_2D[car.closest_point_idx])
+            p2 = np.array(track_2D[car.closest_point_idx + 1])
+            p = np.array(car.position)
 
-        if np.array_equal(p1, p2):
-            return np.linalg.norm(p - p1)
+            if np.array_equal(p1, p2):
+                return np.linalg.norm(p - p1)
 
-        # Calculate the line segment distance
-        num = abs((p2[1] - p1[1]) * p[0] + (p1[0] - p2[0]) * p[1] + (p2[0] * p1[1] - p1[0] * p2[1]))
-        den = np.linalg.norm(np.array(p2) - np.array(p1))
-        distance = num / den
+            # Calculate the projection of point p onto the line segment p1p2
+            t = np.dot(p - p1, p2 - p1) / np.linalg.norm(p2 - p1)**2
+            t = np.clip(t, 0, 1)  # Ensure the projection point is on the segment
+            proj_p = p1 + t * (p2 - p1)
 
-        return distance*2/road_width
+            car.closest_central_point = tuple(proj_p)  # Set the closest point on the central line
+
+            # Calculate the line segment distance
+            distance = np.linalg.norm(p - proj_p)
+            return distance*2/road_width
+
     def compute_angle_to_central_line(car, track_2D):
         # Вычисляем вектор сегмента
         if car.closest_point_idx + 1 >= len(track_2D):

@@ -4,7 +4,7 @@ import traceback
 
 import pygame
 import numpy as np
-from main import compute_distance_central_line, RealisticCar2D
+from carmodel import compute_distance_central_line, RealisticCar2D
 
 # Constants
 WINDOW_WIDTH, WINDOW_HEIGHT = 800, 600
@@ -103,8 +103,12 @@ def draw_car(car:RealisticCar2D, screen, track_2D):
     translation= screen.get_width() // 2 - int(car.position[0] * scale_factor), screen.get_height() // 2 - int(car.position[1] * scale_factor)
 
     car_position = [screen.get_width() // 2, screen.get_height() // 2]
+    orientation = [int(coord * scale_factor*5 + translation[idx % 2]) for idx, coord in enumerate(car.orientation)]
+    car_forward=car.position+orientation
     pygame.draw.circle(screen, (255, 0, 0), car_position, CAR_RADIUS)
-
+    pygame.draw.circle(screen, (255, 0, 255), car_forward, CAR_RADIUS//2)
+    closest_central_point = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(car.closest_central_point)]
+    pygame.draw.circle(screen, (128, 128, 255), closest_central_point, 3)
     # Compute distance to central line and closest point on central line
 
     # Apply scaling and translation to the closest_point_on_central_line

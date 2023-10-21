@@ -9,9 +9,9 @@ import pygame
 import torch
 from gym import spaces
 
-import main
+import carmodel
 import trackgenerator
-from main import RealisticCar2D, place_car_on_track, check_collision_with_track, compute_travel_distance
+from carmodel import RealisticCar2D, place_car_on_track, check_collision_with_track, compute_travel_distance
 from replayplayer import init_screen, draw_track, draw_car
 
 

@@ -11,6 +11,8 @@ from gym.envs.box2d import lunar_lander
 from torch import Tensor
 
 from car_dicsrete.discreteracingenv import DiscreteRacingEnv
+
+
 def init_weights(m):
     if type(m) == nn.Linear:
         torch.nn.init.xavier_uniform_(m.weight)
@@ -19,36 +21,40 @@ def init_weights(m):
 
 # Параметры
 GAMMA = 0.99
-LR = 0.0000007
-CLIP_EPSILON = 0.1
-EPOCHS = 1
-BATCH_SIZE = 2048*32
+LR = 0.001
+CLIP_EPSILON = 0.2
+EPOCHS = 10
+BATCH_SIZE = 2048*256
 
 
 
 # Определение модели
 class ActorCritic(nn.Module):
-    def __init__(self, input_dim, n_actions, neurans=64):
+    def __init__(self, input_dim, n_actions, hidden_size=32):
         super(ActorCritic, self).__init__()
 
-        self.actor = nn.Sequential(
-            nn.Linear(input_dim, neurans),nn.ReLU(),
-            nn.Linear(neurans, neurans),nn.ReLU(),
-
-            nn.Linear(neurans, n_actions),nn.Softmax(dim=-1)
+        # Общие слои
+        self.shared_layers = nn.Sequential(
+            nn.Linear(input_dim, hidden_size),nn.ReLU(),
+            nn.Linear(hidden_size, hidden_size),nn.ReLU()
         )
 
-        self.critic = nn.Sequential(
-            nn.Linear(input_dim, neurans),nn.ReLU(),
-            nn.Linear(neurans, neurans),nn.ReLU(),
-
-            nn.Linear(neurans, 1)
+        # "Голова" для актера
+        self.actor_head = nn.Sequential(
+            nn.Linear(hidden_size, n_actions),
+            nn.Softmax(dim=-1)
         )
+
+        # "Голова" для критика
+        self.critic_head = nn.Linear(hidden_size, 1)
 
     def forward(self, x):
-        prob = self.actor(x)
-        value = self.critic(x)
-        return prob, value
+        shared_representation = self.shared_layers(x)
+
+        action_probs = self.actor_head(shared_representation)
+        state_value = self.critic_head(shared_representation)
+
+        return action_probs, state_value
 
 # PPO update function
 def ppo_update(optimizer, states, actions, old_probs, rewards, dones, model, clip_epsilon=CLIP_EPSILON):
@@ -82,17 +88,24 @@ def ppo_update(optimizer, states, actions, old_probs, rewards, dones, model, cli
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+def get_model_signature(model):
+    signature = []
+    for param in model.parameters():
+        signature.append(str(param.shape))
+    return "_".join(signature).replace(",", "x").replace("(", "").replace(")", "").replace(" ", "")
+
 
 # Main training loop
 
-env = DiscreteRacingEnv()
+env = DiscreteRacingEnv(patience=1000)
 #env.metadata['render_fps']=1000
 model = ActorCritic(env.observation_space.shape[0], env.action_space.n)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
+MODEL_CHECKPOINT__PTH = f"model_checkpoint_{get_model_signature(model.shared_layers)}.pth"
+
 
 model.to(device)
-model.actor.apply(init_weights)
-model.critic.apply(init_weights)
+
 optimizer = optim.Adam(model.parameters(), lr=LR)
 
 
@@ -100,8 +113,8 @@ episdo = 0
 global_step = 0
 # Load model and optimizer from checkpoint if exists
 load_checkpoint = True  # Set to False if you want to train from scratch
-if load_checkpoint and os.path.exists('model_checkpoint.pth'):
-    checkpoint = torch.load("model_checkpoint.pth")
+if load_checkpoint and os.path.exists(MODEL_CHECKPOINT__PTH):
+    checkpoint = torch.load(MODEL_CHECKPOINT__PTH)
     model.load_state_dict(checkpoint['model_state_dict'])
     optimizer.load_state_dict(checkpoint['optimizer_state_dict'])
     episdo = checkpoint['episode']
@@ -115,10 +128,10 @@ while True:
     prob = None
     states, actions, old_probs, rewards, dones = [], [], [], [], []
 
-    while step < 1000 and not done:
+    while step < 10000 and not done:
         step += 1
         global_step += 1
-        state = torch.tensor(state, dtype=torch.float32).unsqueeze(0)
+        state =state.unsqueeze(0)
         state = state.to(device)
 
 
@@ -126,10 +139,9 @@ while True:
         action = torch.multinomial(prob, 1).item()
 
         old_prob = prob[0][action].item() if prob is not None else 1.0
-        custom_info = f'{prob.data if not prob is None else "Random"}'
+        env.custom_info = f'{prob.data if not prob is None else "Random"}'
         next_state, reward, done, _ = env.step(action)
 
-        env.render('train', custom_info=custom_info)
         episode_reward += reward
 
         states.append(state)
@@ -137,24 +149,24 @@ while True:
         old_probs.append(torch.tensor(old_prob))
         rewards.append(torch.tensor(reward))
         dones.append(torch.tensor(done))
+        if not done:
+            state = next_state
+    episdo += 1
+    print(f"Episode {episdo} Reward: {episode_reward}")
+    ppo_update(optimizer,
+               torch.cat(states),
+               torch.stack(actions),
+               torch.stack(old_probs),
+               torch.stack(rewards),
+               torch.stack(dones),
+               model)
+    # Save the model every 50 episodes
+    if episdo % 50 == 0:
+        torch.save({
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'episode': episdo,
+            'global_step': global_step,
+        }, MODEL_CHECKPOINT__PTH)
 
-        if done:
-            episdo += 1
-            print(f"Episode {episdo} Reward: {episode_reward}")
-            ppo_update(optimizer,
-                       torch.cat(states),
-                       torch.stack(actions),
-                       torch.stack(old_probs),
-                       torch.stack(rewards),
-                       torch.stack(dones),
-                       model)
-            # Save the model every 50 episodes
-            if episdo % 50 == 0:
-                torch.save({
-                    'model_state_dict': model.state_dict(),
-                    'optimizer_state_dict': optimizer.state_dict(),
-                    'episode': episdo,
-                    'global_step': global_step,
-                }, "model_checkpoint.pth")
 
-        state = next_state

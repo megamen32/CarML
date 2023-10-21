@@ -153,33 +153,34 @@ def is_segment_intersecting(track, segment, min_distance):
     return False
 
 
-def create_straight_track_v2(start_point, end_point, road_width):
+def create_straight_track_v2(start_point, end_point, desired_segment_length):
     """
     Generates a straight track segment between two points.
     Args:
     - start_point (tuple): The starting point of the segment.
     - end_point (tuple): The ending point of the segment.
     - road_width (float): The width of the road.
+    - desired_segment_length (float): The desired length of each segment.
     Returns:
     - List of points representing the track segment.
     """
     # Calculate the distance between the two points
     distance = np.sqrt((start_point[0] - end_point[0])**2 + (start_point[1] - end_point[1])**2)
 
-    # Calculate the number of segments based on the distance and road_width
-    num_segments = int(distance / road_width) + 1
+    # Calculate the number of segments based on the distance and desired_segment_length
+    num_segments = int(distance / desired_segment_length) + 1
 
     x_points = np.linspace(start_point[0], end_point[0], num_segments)
     y_points = np.linspace(start_point[1], end_point[1], num_segments)
 
     return list(zip(x_points, y_points))
 
-def create_circular_track(radius, road_width, start_angle=0, end_angle=3/2 * np.pi):
+def create_circular_track(radius, desired_segment_length, start_angle=0, end_angle=3/2 * np.pi):
     # Calculate the circumference of the circle
     circumference = 2 * np.pi * radius
 
-    # Determine the number of segments based on the circumference and road width
-    num_segments = int(circumference / road_width)
+    # Determine the number of segments based on the circumference and desired_segment_length
+    num_segments = int(circumference / desired_segment_length)
 
     # Generate the circular track
     angles = np.linspace(start_angle, end_angle, num_segments)
@@ -187,7 +188,6 @@ def create_circular_track(radius, road_width, start_angle=0, end_angle=3/2 * np.
     y = radius * np.sin(angles)
 
     return list(zip(x, y))
-
 def make_strange_trace(forward=True,road_width = 10,radius=None):
     # Create the first circle
 
@@ -202,10 +202,11 @@ def make_strange_trace(forward=True,road_width = 10,radius=None):
     final_track = first_circle
     return final_track
 def create_complex_track_v2(num_parts=60, road_width=30, max_angle=np.pi/6, max_attempts=10):
-    if random.random()<0.5:
-        return make_strange_trace(random.random()<0.5,road_width//2)
-    track = [(0, 0)]  # Starting point
     segment_length=road_width
+    if random.random()<0.2:
+        return make_strange_trace(random.random()<0.5,segment_length,radius=road_width*5)
+    track = [(0, 0)]  # Starting point
+
 
     last_angle = random.uniform(0, 2*np.pi)  # Starting direction
 
