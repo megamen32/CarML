@@ -48,8 +48,8 @@ ACTIONS = {
 class DiscreteRacingEnv(gym.Env):
     def advanced_reward_function(self,car, collision):
         COLLISION_PENALTY = -0.9
-        BACKWARD_PENALTY = -0.9
-        FINISH_MULTIPLIER = 2
+        BACKWARD_PENALTY = -0.2
+        FINISH_MULTIPLIER = 10
         # Check for collisions
         if collision:
             return COLLISION_PENALTY, False
@@ -64,7 +64,7 @@ class DiscreteRacingEnv(gym.Env):
             # Normalize by dividing by the total track length
 
 
-            distance_reward = 1
+            distance_reward = 0.5
 
         finish_reward = 0
         if car.closest_point_idx == self.total_segments - 2:
@@ -73,7 +73,7 @@ class DiscreteRacingEnv(gym.Env):
 
         # Calculate alignment reward
 
-        alignment_reward =1-car.distance_to_central
+        alignment_reward =(1-car.distance_to_central)*0.1
         if abs(car.turning_rate)>0.8 and car.speed_normilize<0.9:
             alignment_reward=-0.05
 
@@ -203,8 +203,10 @@ class DiscreteRacingEnv(gym.Env):
         alignment_text = self.font.render(f"Alignment: {self.car.alignment:.2f}", True, (255, 255, 255))
 
         # Curve information (assuming you have n=2 for now, can be extended for more)
-        curve_1_distance_text = self.font.render(f"Curve 1 Distance: {self.car.curve_distances[0]:.2f}", True, (255, 255, 255))
-        curve_1_direction_text = self.font.render(f"Curve 1 Direction: {'Left' if self.car.curve_directions[0] == 1 else 'Right'}", True, (255, 255, 255))
+        curve_1_distance_str = ', '.join([f"{item:.2f}" for item in self.car.curve_distances])
+        curve_1_distance_text = self.font.render(f"Curve 1 Distance: {curve_1_distance_str}", True, (255, 255, 255))
+        curve_1_dirs_str = ', '.join([f"{item:.2f}" for item in self.car.curve_directions])
+        curve_1_direction_text = self.font.render(f"Curve 1 Direction: {curve_1_dirs_str}", True, (255, 255, 255))
 
         # Drawing them on the screen
         y_offset = 210  # Starting y-coordinate
@@ -253,9 +255,11 @@ class DiscreteRacingEnv(gym.Env):
         # Refresh the display
         pygame.display.flip()
 
-        if self.render_mode=='human' and self.metadata['render_fps']<1000:
-            # Optionally add delay for better visualization
-            pygame.time.wait(1/self.metadata['render_fps'])
+        if self.render_mode=='human' and self.metadata['render_fps'] < 1000:
+            # Calculate delay to achieve the required FPS
+            delay = int(1000 / self.metadata['render_fps'])
+            pygame.time.wait(delay)
+
 
     def close(self):
         # Cleanup logic

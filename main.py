@@ -125,17 +125,43 @@ class RealisticCar2D:
             self.alignment = np.dot(track_dir, self.orientation)
             self.angle=self.compute_angle_to_central_line(track_2D)
             self.curve_directions = []
-            self.curve_distances =  []
-            for i in range(1, (self.n +1)):
-                i=i*self.curve_step
-                idx = min(self.closest_point_idx + i, len(track_2D) - 1)
-                next_dir = np.array(track_2D[idx]) - self.position
 
-                curve_dir =  np.cross(next_dir, self.orientation)  # 1 for left turn, -1 for right turn
-                curve_distance = np.linalg.norm(next_dir)
+
+            self.curve_directions = []
+            raw_curve_distances = []
+
+            previous_point = self.position  # Начнем с позиции машины
+
+            self.curve_directions = []
+            raw_curve_distances = []
+
+            for i in range(1, (self.n + 1)):
+                i = i * self.curve_step
+                idx = min(self.closest_point_idx + i, len(track_2D) - 1)
+
+                # Вычисляем направление и расстояние от текущей позиции автомобиля до текущей точки на треке
+                current_dir = np.array(track_2D[idx]) - self.position
+                curve_distance = np.linalg.norm(current_dir)
+
+                if idx + 1 < len(track_2D):
+                    next_dir = np.array(track_2D[idx + 1]) - np.array(track_2D[idx])
+                else:
+                    next_dir = current_dir
+
+                cosine_angle = np.dot(current_dir, next_dir) / (np.linalg.norm(current_dir) * np.linalg.norm(next_dir))
+                angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
+                curve_dir = np.sign(np.cross(next_dir, current_dir)) * angle  # Using cross product to determine the direction of rotation
 
                 self.curve_directions.append(curve_dir)
-                self.curve_distances.append(curve_distance/(road_width*i))
+                raw_curve_distances.append(1-curve_distance/road_width)
+
+            # Normalize raw_curve_distances by their sum
+            #sum_distance = sum(raw_curve_distances)
+            #self.curve_distances = [dist / sum_distance for dist in raw_curve_distances]
+            self.curve_distances=raw_curve_distances
+            # Normalize raw_curve_distances by their sum
+            #sum_distance = sum(raw_curve_distances)
+            #self.curve_distances = [dist / sum_distance for dist in raw_curve_distances]
                 #print(len(self.curve_directions))
 
     def compute_distance_to_central_line(car, track_2D, road_width):

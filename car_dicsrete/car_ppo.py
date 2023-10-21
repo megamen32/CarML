@@ -19,9 +19,9 @@ def init_weights(m):
 
 # Параметры
 GAMMA = 0.99
-LR = 0.000007
-CLIP_EPSILON = 0.2
-EPOCHS = 20
+LR = 0.0000007
+CLIP_EPSILON = 0.1
+EPOCHS = 1
 BATCH_SIZE = 2048*32
 
 
@@ -52,6 +52,7 @@ class ActorCritic(nn.Module):
 
 # PPO update function
 def ppo_update(optimizer, states, actions, old_probs, rewards, dones, model, clip_epsilon=CLIP_EPSILON):
+    rewards = (rewards - rewards.mean()) / (rewards.std() + 1e-5)
     for _ in range(EPOCHS):
         for idx in range(0, len(states), BATCH_SIZE):
             state_batch = states[idx:idx+BATCH_SIZE]
