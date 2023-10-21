@@ -65,7 +65,6 @@ def test_winner(winner_genome, config):
             action = [float(a) for a in net.activate(state)]
             state, reward, done, _ = env.step(action)
             total_reward += reward
-            env.render(mode='human')
 
     average_reward = total_reward / num_episodes
     print(f"Average reward over {num_episodes} episodes: {average_reward}")

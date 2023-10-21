@@ -153,7 +153,7 @@ class DiscreteRacingEnv(gym.Env):
         #self.reward_history[self.current_reward_index] = self.reward
         done = self.is_no_improve(done)
         if self.render_mode=='human':
-            env.render()
+            self.render()
         return next_state, self.reward, done, {}
 
     def is_no_improve(self, done):
@@ -253,9 +253,9 @@ class DiscreteRacingEnv(gym.Env):
         # Refresh the display
         pygame.display.flip()
 
-        if self.render_mode=='human':
+        if self.render_mode=='human' and self.metadata['render_fps']<1000:
             # Optionally add delay for better visualization
-            pygame.time.wait(self.metadata['render_fps'])
+            pygame.time.wait(1/self.metadata['render_fps'])
 
     def close(self):
         # Cleanup logic
