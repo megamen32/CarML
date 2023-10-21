@@ -34,7 +34,7 @@ def eval_genomes(genomes, config):
                     env.render(mode='train')
         genome.fitness = total_reward / testing_times
 def eval_genome(genome, config):
-    env=DiscreteRacingEnv(render=render)
+    env=DiscreteRacingEnv(render_mode='human' if render else 'train',patience=70)
     net = neat.nn.FeedForwardNetwork.create(genome, config)
     total_reward = 0
     for _ in range(testing_times):  # Run for 10 episodes to get an average performance
@@ -46,12 +46,11 @@ def eval_genome(genome, config):
             state, reward, done, _ = env.step(action)
             total_reward += reward
             if render:
-                env.render(mode='train')
                 draw_net(config,genome,env.screen,state,prob)
     return total_reward / testing_times
 
 def test_winner(winner_genome, config):
-    env=DiscreteRacingEnv(render=render)
+    env=DiscreteRacingEnv(render_mode='human' if render else 'train')
     # Decode the winner genome into a neural network
     net = neat.nn.FeedForwardNetwork.create(winner_genome, config)
 

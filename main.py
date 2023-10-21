@@ -27,7 +27,7 @@ import math
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=1, drag_coefficient=0.2, max_steering_rate=0.05,n=1,curve_step=2):
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=0.2, drag_coefficient=0.2, max_steering_rate=10,n=3,curve_step=4):
         self.position = position
         self.velocity = velocity
         self.orientation = np.array([1.0, 0.0])
@@ -51,6 +51,7 @@ class RealisticCar2D:
         self.prev_orientation=self.orientation
         self.drifting=False
         self.lateral_velocity=0
+        self.speed_normilize=0
         self.n=n
         self.alignment=0
         self.curve_step=curve_step
@@ -58,52 +59,49 @@ class RealisticCar2D:
         self.curve_distances =  [0 for _ in range(n)]
         #print('start',len(self.curve_directions))
 
-    def update_position(self, delta_time, track_2D,road_width, acceleration=0.0, steering_angle=0.0):
-        # Update acceleration
-        self.prev_position=self.position.copy()
-        self.prev_orientation=self.prev_orientation.copy()
+    def update_position(self, delta_time,track_2D,road_width, acceleration=0.0, steering_angle=0.0):
+        # Обновление ускорения
         acc_diff = acceleration - self.acceleration
         acc_diff = np.clip(acc_diff, -self.max_acceleration * delta_time, self.max_acceleration * delta_time)
         self.acceleration += acc_diff
+        friction_coefficient = 0.05 * abs(steering_angle)
+        self.acceleration -= friction_coefficient * self.speed
 
 
-        acceleration_vector = self.acceleration * self.orientation
+        # Рассчитать требуемое ускорение в зависимости от текущей скорости
+        acceleration_factor = max(0, 1 - self.speed_normilize)
 
-        # Update steering angle
+        # Обновление угла рулевого управления
         steering_diff = steering_angle - self.current_steering_angle
         steering_diff = np.clip(steering_diff, -self.max_steering_rate * delta_time, self.max_steering_rate * delta_time)
         self.current_steering_angle += steering_diff
-        if self.speed > 0.9 and (steering_angle > 0.5 or steering_angle < -0.5):
-            self.drifting=True
-            # Modify velocity to add drift effect
-            drift_vector = self.velocity * self.drift_factor
-            self.velocity = (1 - self.drift_factor) * (self.velocity + (acceleration_vector / self.mass) * delta_time) + drift_vector
-            self.current_steering_angle += steering_diff*self.drift_factor
 
-            # Rotation matrix
-            rotation_matrix = np.array([[math.cos(self.current_steering_angle), -math.sin(self.current_steering_angle)],
-                                        [math.sin(self.current_steering_angle), math.cos(self.current_steering_angle)]])
-            self.orientation = np.dot(rotation_matrix, self.orientation)
-        else:
+        # Рассчитать фактор поворота в зависимости от текущей скорости
+        steering_factor = 1 - min(self.speed_normilize, 1)
 
-            if self.speed > 0.1 and not (self.speed > 0.9):
-                self.drifting=False
-                self.current_steering_angle += steering_diff
-                # Rotation matrix
-                rotation_matrix = np.array([[math.cos(self.current_steering_angle), -math.sin(self.current_steering_angle)],
-                                            [math.sin(self.current_steering_angle), math.cos(self.current_steering_angle)]])
-                self.orientation = np.dot(rotation_matrix, self.orientation)
-                self.velocity = np.dot(rotation_matrix, self.velocity)
-            self.velocity+= (acceleration_vector / self.mass - self.speed*self.speed**self.max_speed*self.drag_coefficient) * delta_time
+        # Применить факторы к ускорению и рулевому управлению
+        acceleration_vector = acceleration_factor * self.acceleration * self.orientation
+        steering_vector = steering_factor * self.current_steering_angle
 
-        # Update position
+        # Обновить ориентацию (направление)
+        rotation_matrix = np.array([
+            [np.cos(steering_vector), -np.sin(steering_vector)],
+            [np.sin(steering_vector), np.cos(steering_vector)]
+        ])
+        self.orientation = np.dot(rotation_matrix, self.orientation)
+
+
+
+        # Обновить скорость и позицию
+        self.velocity = np.dot(rotation_matrix, self.velocity + acceleration_vector * delta_time)
         self.position += self.velocity * delta_time
 
-        # Update speed and cache state
-        self.speed = np.linalg.norm(self.velocity)/self.max_speed
-        if self.speed>1:
-            self.velocity=self.velocity/self.speed
-            self.speed = np.linalg.norm(self.velocity)/self.max_speed
+        # Ограничить скорость
+        self.speed = np.linalg.norm(self.velocity)
+        if self.speed > self.max_speed:
+            self.velocity = (self.velocity / self.speed) * self.max_speed
+            self.speed = self.max_speed
+        self.speed_normilize=self.speed/self.max_speed
 
         self.cache_state(track_2D,delta_time,road_width)
 

@@ -201,7 +201,7 @@ def make_strange_trace(forward=True,road_width = 10,radius=None):
 
     final_track = first_circle
     return final_track
-def create_complex_track_v2(num_parts=20, road_width=30, max_angle=np.pi/6, max_attempts=10):
+def create_complex_track_v2(num_parts=60, road_width=30, max_angle=np.pi/6, max_attempts=10):
     if random.random()<0.5:
         return make_strange_trace(random.random()<0.5,road_width//2)
     track = [(0, 0)]  # Starting point
@@ -237,7 +237,7 @@ def create_complex_track_v2(num_parts=20, road_width=30, max_angle=np.pi/6, max_
         if not added_segment:  # If we couldn't add a segment after max_attempts
             print(f"Failed to add a segment after {max_attempts} attempts.")
             break
-    if total_segment<num_parts/2:
+    if total_segment<num_parts*0.8:
         return make_strange_trace(random.random()<0.5,road_width//2)
 
     return track

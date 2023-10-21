@@ -28,19 +28,19 @@ BATCH_SIZE = 2048*32
 
 # Определение модели
 class ActorCritic(nn.Module):
-    def __init__(self, input_dim, n_actions, neurans=128):
+    def __init__(self, input_dim, n_actions, neurans=64):
         super(ActorCritic, self).__init__()
 
         self.actor = nn.Sequential(
-            nn.Linear(input_dim, neurans),nn.Tanh(),
-            nn.Linear(neurans, neurans),nn.Tanh(),
+            nn.Linear(input_dim, neurans),nn.ReLU(),
+            nn.Linear(neurans, neurans),nn.ReLU(),
 
             nn.Linear(neurans, n_actions),nn.Softmax(dim=-1)
         )
 
         self.critic = nn.Sequential(
-            nn.Linear(input_dim, neurans),nn.Tanh(),
-            nn.Linear(neurans, neurans),nn.Tanh(),
+            nn.Linear(input_dim, neurans),nn.ReLU(),
+            nn.Linear(neurans, neurans),nn.ReLU(),
 
             nn.Linear(neurans, 1)
         )
@@ -84,7 +84,7 @@ def ppo_update(optimizer, states, actions, old_probs, rewards, dones, model, cli
 
 # Main training loop
 
-env = DiscreteRacingEnv(render=True)
+env = DiscreteRacingEnv()
 #env.metadata['render_fps']=1000
 model = ActorCritic(env.observation_space.shape[0], env.action_space.n)
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
