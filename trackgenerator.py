@@ -203,7 +203,7 @@ def make_strange_trace(forward=True,road_width = 10,radius=None):
     return final_track
 def create_complex_track_v2(num_parts=60, road_width=30, max_angle=np.pi/6, max_attempts=10):
     segment_length=road_width
-    if random.random()<0.2:
+    if random.random()<0.5:
         return make_strange_trace(random.random()<0.5,segment_length,radius=road_width*5)
     track = [(0, 0)]  # Starting point
 

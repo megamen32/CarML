@@ -12,25 +12,6 @@ CLIP_EPSILON = 0.2
 EPOCHS = 4
 BATCH_SIZE = 64
 
-# Определение модели
-class ActorCritic(nn.Module):
-    def __init__(self, input_dim, n_actions):
-        super(ActorCritic, self).__init__()
-
-        self.actor = nn.Sequential(
-            nn.Linear(input_dim, 128),nn.ReLU(),
-            nn.Linear(128, n_actions),nn.Softmax(dim=-1)
-        )
-
-        self.critic = nn.Sequential(
-            nn.Linear(input_dim, 128),nn.ReLU(),
-            nn.Linear(128, 1)
-        )
-
-    def forward(self, x):
-        prob = self.actor(x)
-        value = self.critic(x)
-        return prob, value
 
 # PPO update function
 def ppo_update(optimizer, states, actions, old_probs, rewards, dones, model, clip_epsilon=CLIP_EPSILON):

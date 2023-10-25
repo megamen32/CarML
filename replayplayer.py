@@ -115,8 +115,9 @@ def draw_car(car:RealisticCar2D, screen, track_2D):
     goal = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[car.lastest_point_idx])]
     pygame.draw.circle(screen, (0,255, 0), goal, 3)
 
-    ngoal = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[min(car.closest_point_idx+car.n*car.curve_step,len(track_2D)-1)])]
-    pygame.draw.circle(screen, (0,255, 255), ngoal, 3)
+    for i in range(1,car.n+1):
+        ngoal = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[min(car.closest_point_idx+i*car.curve_step,len(track_2D)-1)])]
+        pygame.draw.circle(screen, (0,255-i/(car.n+1)*255, 255-i/(car.n+1)*255), ngoal, 3)
 
     #pygame.draw.line(screen, (0, 255, 0), car_position, closest_point_scaled, 1)
     cur_segment = [int(coord * scale_factor + translation[idx % 2]) for idx, coord in enumerate(track_2D[car.closest_point_idx])]

@@ -27,7 +27,7 @@ import math
 
 # More Realistic Car2D class with advanced physics features
 class RealisticCar2D:
-    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=0.2, drag_coefficient=0.2, max_steering_rate=0.1,n=3,curve_step=4):
+    def __init__(self, position=np.array([0.0, 0.0]), velocity=np.array([0.0, 0.0]), mass=1.0, max_speed=10, max_acceleration=0.2, drag_coefficient=0.2, max_steering_rate=0.1,n=3,curve_step=2):
         self.position = position
         self.velocity = velocity
         self.orientation = np.array([1.0, 0.0])
@@ -124,46 +124,50 @@ class RealisticCar2D:
             # Car's direction
             # Compute the dot product between the car direction and track direction
             self.alignment = np.dot(track_dir, self.orientation)
-            self.angle=self.compute_angle_to_central_line(track_2D)/np.pi
-            self.curve_directions = []
-
+            self.angle=self.compute_angle_to_central_line()/np.pi
 
             self.curve_directions = []
             raw_curve_distances = []
 
-            previous_point = self.position  # Начнем с позиции машины
-
-            self.curve_directions = []
-            raw_curve_distances = []
+            # Инициализация первой точки относительно автомобиля
+            prev_point = np.array(self.position)
 
             for i in range(1, (self.n + 1)):
                 i = i * self.curve_step
                 idx = min(self.closest_point_idx + i, len(track_2D) - 1)
 
-                # Вычисляем направление и расстояние от текущей позиции автомобиля до текущей точки на треке
-                current_dir = np.array(track_2D[idx]) - self.position
+                # Вычисляем направление и расстояние от предыдущей точки до текущей точки на треке
+                current_oriantion =self.orientation
+                current_dir =track_2D[idx]-prev_point
                 curve_distance = np.linalg.norm(current_dir)
 
-                if idx + 1 < len(track_2D):
-                    next_dir = np.array(track_2D[idx + 1]) - np.array(track_2D[idx])
+                if idx + self.curve_step < len(track_2D):
+                    next_dir = np.array(track_2D[idx + self.curve_step]) - prev_point
                 else:
                     next_dir = current_dir
 
-                cosine_angle = np.dot(current_dir, next_dir) / (np.linalg.norm(current_dir) * np.linalg.norm(next_dir))
+                norm_current = np.linalg.norm(current_oriantion)
+                norm_next = np.linalg.norm(next_dir)
+
+                if norm_current == 0 or norm_next == 0:
+                    # Handle the case where one or both vectors have zero magnitude
+                    # For example, set cosine_angle to a default value or handle it appropriately
+                    cosine_angle = 0.0  # or whatever value makes sense in this context
+                else:
+                    cosine_angle = np.dot(current_oriantion, next_dir) / (norm_current * norm_next)
+
                 angle = np.arccos(np.clip(cosine_angle, -1.0, 1.0))
-                curve_dir = np.sign(np.cross(next_dir, current_dir)) * angle  # Using cross product to determine the direction of rotation
+                curve_dir = np.sign(np.cross(next_dir, current_oriantion)) * angle  # Using cross product to determine the direction of rotation
 
                 self.curve_directions.append(curve_dir)
                 raw_curve_distances.append(curve_distance/segments_length/self.curve_step)
 
-            # Normalize raw_curve_distances by their sum
-            #sum_distance = sum(raw_curve_distances)
-            #self.curve_distances = [dist / sum_distance for dist in raw_curve_distances]
+                # Обновляем prev_point для следующей итерации
+                prev_point = np.array(track_2D[idx])
+
             self.curve_distances=raw_curve_distances
             # Normalize raw_curve_distances by their sum
-            #sum_distance = sum(raw_curve_distances)
-            #self.curve_distances = [dist / sum_distance for dist in raw_curve_distances]
-                #print(len(self.curve_directions))
+
 
     def compute_distance_to_central_line(car, track_2D, road_width):
             if car.closest_point_idx + 1 >= len(track_2D):
@@ -187,12 +191,8 @@ class RealisticCar2D:
             distance = np.linalg.norm(p - proj_p)
             return distance*2/road_width
 
-    def compute_angle_to_central_line(car, track_2D):
-        # Вычисляем вектор сегмента
-        if car.closest_point_idx + 1 >= len(track_2D):
-            segment_direction = np.array(track_2D[0]) - np.array(track_2D[car.closest_point_idx])
-        else:
-            segment_direction = np.array(track_2D[car.closest_point_idx+1]) - np.array(track_2D[car.closest_point_idx])
+    def compute_angle_to_central_line(car):
+        segment_direction = np.array(car.closest_central_point) - np.array(car.position)
 
         # Вычисляем косинус угла между векторами
         cos_angle = np.dot(car.orientation, segment_direction) / (np.linalg.norm(car.orientation) * np.linalg.norm(segment_direction))
@@ -203,7 +203,6 @@ class RealisticCar2D:
         if cross_product < 0:
             angle_rad = -angle_rad
 
-        #angle_deg = np.degrees(angle_rad)
         return angle_rad
 
 

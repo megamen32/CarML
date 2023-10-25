@@ -1,13 +1,14 @@
 import math
 import random
 
-import gym
+import gymnasium
+import numpy
 import numpy as np
 
 import gymnn
 import pygame
 import torch
-from gym import spaces
+from gymnasium import spaces
 
 import carmodel
 import trackgenerator
@@ -28,14 +29,14 @@ def get_state(car, track_2D,total_track_length, n=1):
     # Flatten the lists to add to the state
     curve_directions = np.array(car.curve_directions).flatten()
     curve_distances = np.array(car.curve_distances).flatten()
-    return torch.FloatTensor([
+    return numpy.array([
         car.speed_normilize,
         car.acceleration,
         car.turning_rate,
-        car.lateral_velocity,
+        #car.lateral_velocity,
         car.distance_to_central,
         car.angle,
-        car.alignment,
+        #car.alignment,
         *curve_distances,
         *curve_directions
     ])
@@ -47,11 +48,12 @@ ACTIONS = {
     3: [0.0, -1.0], # Turn left
     4: [0.0, 1.0]   # Turn right
 }
-class DiscreteRacingEnv(gym.Env):
+class DiscreteRacingEnv(gymnasium.Env):
+    metadata = {"render_modes": ["human",'rgb_array'], "render_fps": 1000}
     def advanced_reward_function(self,car, collision):
-        COLLISION_PENALTY = -2
-        BACKWARD_PENALTY = -0.2
-        FINISH_MULTIPLIER = 100
+        COLLISION_PENALTY = -50
+        BACKWARD_PENALTY = -10
+        FINISH_MULTIPLIER = 1000
         # Check for collisions
         if collision:
             return COLLISION_PENALTY, False
@@ -61,31 +63,31 @@ class DiscreteRacingEnv(gym.Env):
             return BACKWARD_PENALTY, False
 
         # Calculate distance traveled
-        distance_reward = -0.05
+        distance_reward = -0.2
         if car.closest_point_idx > car.lastest_point_idx:
             # Normalize by dividing by the total track length
 
 
-            distance_reward = 0.5
+            distance_reward = 1
+            return distance_reward,False
 
         finish_reward = 0
         if car.closest_point_idx == self.total_segments - 2:
-            finish_reward = FINISH_MULTIPLIER * self.time/self.max_time
+            finish_reward = FINISH_MULTIPLIER
             return finish_reward, True
 
         # Calculate alignment reward
-
-        alignment_reward =car.distance_to_central*0.05
-        if abs(car.turning_rate)>0.8 and car.speed_normilize<0.9:
-            alignment_reward=-0.05
+        alignment_reward=0
+        #alignment_reward =car.distance_to_central*0.2 +car.speed_normilize*0.2
+        if abs(car.turning_rate)>0.8 :
+            alignment_reward=-0.5
 
         # Calculate the total reward
-        total_reward = distance_reward + alignment_reward + finish_reward
+        total_reward = -0.2+alignment_reward
 
         return total_reward, finish_reward > 0
-    def __init__(self, road_width=100, delta_time=1,max_time=20000,render_mode='human',patience=500):
+    def __init__(self, road_width=100, delta_time=1,max_time=2000,render_mode='human',patience=500):
         super(DiscreteRacingEnv, self).__init__()
-        self.metadata['render_fps'] =1000
         self.render_mode=render_mode
         render=True if render_mode=='human' else None
         self._road_width=road_width
@@ -108,10 +110,10 @@ class DiscreteRacingEnv(gym.Env):
             self.font = pygame.font.SysFont(None, 36)  # Use default font, size 36
             self.screen, self.manager,self.clock = init_screen()
 
-        state=self.reset()
-        self.observation_space = spaces.Box(low=-1, high=1, shape=(state.shape[0],), dtype=np.float32)
+        state,_=self.reset()
+        self.observation_space = spaces.Box(low=-10, high=10, shape=(state.shape[0],), dtype=np.float64)
 
-    def reset(self, seed=0, options=None):
+    def reset(self, seed=None, options=None):
         if options is None:
             options = {}
         self.road_width = self._road_width#*random.uniform(0.2,1.5)
@@ -135,7 +137,7 @@ class DiscreteRacingEnv(gym.Env):
         self.current_reward_index = 0
         self.finish=False
         state = get_state(self.car, self.track_2D,self.total_track_length)  # Assuming single car for simplicity
-        return state
+        return state,{}
 
 
     def step(self, action):
@@ -173,14 +175,14 @@ class DiscreteRacingEnv(gym.Env):
 
         self.reward, self.finish = self.advanced_reward_function(self.car, collision)
         self.cumulative_reward += self.reward
-        done = self.max_time <self.time or self.finish
+        done = self.max_time <self.time or self.finish #or collision
         if self.finish:
             print('finish cum_reward=',self.cumulative_reward,'reward=',self.reward,'time=',self.time,'speed=',self.car.speed_normilize)
         #self.reward_history[self.current_reward_index] = self.reward
         done = self.is_no_improve(done,collision)
         if self.render_mode=='human':
             self.render()
-        return next_state, self.reward, done, {}
+        return next_state, self.reward, done,collision, {}
 
     def is_no_improve(self, done,collision):
         alpha = 0.5  # Smoothing coefficient
@@ -295,7 +297,13 @@ class DiscreteRacingEnv(gym.Env):
         # Cleanup logic
         pygame.display.quit()
         pygame.quit()
+from gymnasium.envs.registration import register
 
+register(
+    id='DiscreteRacingEnv',
+    entry_point='car_dicsrete.discreteracingenv:DiscreteRacingEnv',
+    max_episode_steps=2000,
+)
 if __name__ == '__main__':
     env = DiscreteRacingEnv()
     env.metadata['render_fps']=30
@@ -349,7 +357,7 @@ if __name__ == '__main__':
                 human_action = 2 if distance_to_central > 1 - 0.5 else 1  # Ускорить, если машина далеко от центра; иначе замедлить
 
 # Ускорить или замедлить в зависимости от расстояния до центра
-        next_state, reward, done, _ = env.step(action=human_action)
+        next_state, reward, done, _,_ = env.step(action=human_action)
         rewards.append(reward)
         if c_infp>num_to_info:
             print('cur reward',np.sum(rewards))
